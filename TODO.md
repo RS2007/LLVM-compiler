@@ -8,3 +8,14 @@
   - [ ] Call
 - [ ] Add support for classes and inheritance
 - [ ] Higher order function support
+
+## Language Spec
+```
+defun add(x: number,y: number): number -> {
+  return x+y;
+}
+```
+
+- let statements take in functions
+- all functions defacto in main
+- create a separate function in case of expression function

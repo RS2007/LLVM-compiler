@@ -24,14 +24,19 @@ enum class TokenType {
     Return,
     Function,
     LBrace,
-    RBrace
+    RBrace,
+    IntType,
+    StringType,
+    VoidType,
+    Colon
 };
 
 std::ostream& operator<<(std::ostream& strm, TokenType tt) {
     const std::string tokenNames[] = {
-        "Number",  "String",  "Identifier", "LParen", "RParen", "Let",
-        "LSquare", "RSquare", "Semicolon",  "Plus",   "Minus",  "Equal",
-        "Comma",   "Return",  "Function",   "LBrace", "RBrace"};
+        "Number", "String",  "Identifier", "LParen",     "RParen",
+        "Let",    "LSquare", "RSquare",    "Semicolon",  "Plus",
+        "Minus",  "Equal",   "Comma",      "Return",     "Function",
+        "LBrace", "RBrace",  "IntType",    "StringType", "Colon"};
     return strm << tokenNames[static_cast<int>(tt)];
 }
 
@@ -136,6 +141,10 @@ class Lexer {
                 auto token = std::make_shared<Token>(Token(TokenType::RBrace));
                 tokens.emplace_back(token);
                 it++;
+            } else if (*it == ':') {
+                auto token = std::make_shared<Token>(TokenType::Colon);
+                tokens.emplace_back(token);
+                it++;
             } else {
                 std::string identifierValue;
                 while (isalpha(*it)) {
@@ -149,6 +158,12 @@ class Lexer {
                     token = std::make_shared<Token>(TokenType::Return);
                 } else if (identifierValue == "defun") {
                     token = std::make_shared<Token>(TokenType::Function);
+                } else if (identifierValue == "int") {
+                    token = std::make_shared<Token>(TokenType::IntType);
+                } else if (identifierValue == "string") {
+                    token = std::make_shared<Token>(TokenType::StringType);
+                } else if (identifierValue == "void") {
+                    token = std::make_shared<Token>(TokenType::VoidType);
                 } else {
                     token = std::make_shared<Token>(
                         Token(TokenType::Identifier, identifierValue));

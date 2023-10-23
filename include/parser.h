@@ -9,6 +9,7 @@
 
 // Forward declarations in no particular order
 class BlockStatement;
+class ReturnStatement;
 class ExpressionNode;
 class StatementNode;
 
@@ -18,7 +19,7 @@ enum class NodeType {
     Expression,
 };
 
-enum class StatementType { Let, Block, Return, Expression };
+enum class StatementType { Let, Block, Return, Expression, Function };
 
 enum class Precedence {
     Lowest,
@@ -37,7 +38,6 @@ enum class ExpressionType {
     Prefix,
     Infix,
     If,
-    Function,
     Call,
     String,
     Array,
@@ -71,17 +71,29 @@ class InfixExpression {
     }
 };
 
-class FunctionExpression {
+class FunctionArg {
+   public:
+    TokenType type;
+    std::shared_ptr<ExpressionNode> value;
+    FunctionArg(TokenType type, std::shared_ptr<ExpressionNode> value)
+        : type(type), value(value) {}
+};
+
+class FunctionStatement {
    public:
     std::string name;
-    std::shared_ptr<std::vector<std::shared_ptr<ExpressionNode>>> arguments;
+    std::vector<std::shared_ptr<FunctionArg>> arguments;
     std::shared_ptr<BlockStatement> body;
-    FunctionExpression() {}
-    FunctionExpression(
-        std::string name,
-        std::shared_ptr<std::vector<std::shared_ptr<ExpressionNode>>> arguments,
-        std::shared_ptr<BlockStatement> body)
-        : name(name), arguments(arguments), body(body) {}
+    TokenType returnType;
+    FunctionStatement() {}
+    FunctionStatement(std::string name,
+                      std::vector<std::shared_ptr<FunctionArg>> arguments,
+                      std::shared_ptr<BlockStatement> body,
+                      TokenType returnType)
+        : name(name),
+          arguments(arguments),
+          body(body),
+          returnType(returnType) {}
 };
 
 class IdentifierExpression {
@@ -97,7 +109,6 @@ class ExpressionNode {
     std::shared_ptr<StringExpression> stringExp;
     std::shared_ptr<IntegerExpression> integerExp;
     std::shared_ptr<InfixExpression> infixExpr;
-    std::shared_ptr<FunctionExpression> funcExpression;
     std::shared_ptr<IdentifierExpression> identifierExpression;
     ExpressionNode(std::shared_ptr<StringExpression> stringExp) {
         this->type = ExpressionType::String;
@@ -111,8 +122,6 @@ class ExpressionNode {
         this->type = ExpressionType::Infix;
         this->infixExpr = infixExpression;
     }
-    ExpressionNode(std::shared_ptr<FunctionExpression> funcExpression)
-        : funcExpression(funcExpression), type(ExpressionType::Function) {}
     ExpressionNode(std::shared_ptr<IdentifierExpression> identifierExpression)
         : identifierExpression(identifierExpression),
           type(ExpressionType::Identifier) {}
@@ -132,6 +141,10 @@ class BlockStatement {
         : statements(statements) {}
 };
 
+class ReturnStatement {
+   public:
+};
+
 class ExpressionStatement {
    public:
     std::shared_ptr<ExpressionNode> expression;
@@ -144,9 +157,12 @@ class StatementNode {
     StatementType type;
     std::shared_ptr<LetStatement> letStatement;
     std::shared_ptr<ExpressionStatement> expressionStatement;
+    std::shared_ptr<FunctionStatement> funcStatement;
     StatementNode() {}
     StatementNode(std::shared_ptr<LetStatement> letStatement)
         : type(StatementType::Let), letStatement(letStatement) {}
+    StatementNode(std::shared_ptr<FunctionStatement> functionStatement)
+        : type(StatementType::Function), funcStatement(functionStatement) {}
     StatementNode(std::shared_ptr<ExpressionStatement> expressionStatement) {
         this->type = StatementType::Expression;
         this->expressionStatement = expressionStatement;
@@ -263,6 +279,10 @@ class Parser {
             case TokenType::Return: {
                 assert(false && "Unimplemented");
             }
+            case TokenType::Function: {
+                statement = parseFunction();
+                break;
+            }
             default: {
                 std::cout << "From statement " << (*tokenIt).get()->tokenType
                           << "\n";
@@ -283,9 +303,6 @@ class Parser {
                 return parseInteger(precedence);
             case TokenType::String:
                 return parseString(precedence);
-            case TokenType::Function: {
-                return parseFunction(precedence);
-            }
             case TokenType::Identifier: {
                 return parseIdentifier(precedence);
             }
@@ -294,16 +311,21 @@ class Parser {
                 assert(false && "Should'nt hit here");
         }
     }
-    std::shared_ptr<ExpressionNode> parseFunction(Precedence precedence) {
+    std::shared_ptr<StatementNode> parseFunction() {
         tokenIt++;
         assertToken(tokenIt, TokenType::Identifier);
         auto name = (*tokenIt).get()->identifierValue;
         tokenIt++;
         auto arguments = parseFunctionArguments();
+        assertToken(tokenIt, TokenType::Colon);
+        tokenIt++;
+        // TODO:have an assert for the return types
+        auto returnType = (*tokenIt)->tokenType;
+        tokenIt++;
         auto body = parseFunctionBody();
-        auto funcExpression =
-            std::make_shared<FunctionExpression>(name, arguments, body);
-        return std::make_shared<ExpressionNode>(funcExpression);
+        auto funcStatement = std::make_shared<FunctionStatement>(
+            name, arguments, body, returnType);
+        return std::make_shared<StatementNode>(funcStatement);
     }
 
     std::shared_ptr<BlockStatement> parseFunctionBody() {
@@ -325,11 +347,9 @@ class Parser {
         return std::make_shared<BlockStatement>(statements);
     }
 
-    std::shared_ptr<std::vector<std::shared_ptr<ExpressionNode>>>
-    parseFunctionArguments() {
+    std::vector<std::shared_ptr<FunctionArg>> parseFunctionArguments() {
         assertToken(tokenIt, TokenType::LParen);
-        auto arguments =
-            std::make_shared<std::vector<std::shared_ptr<ExpressionNode>>>();
+        auto arguments = std::vector<std::shared_ptr<FunctionArg>>();
         while (true) {
             // TODO: refactor
             // Check if after parsing expression RBrace is reached
@@ -347,7 +367,13 @@ class Parser {
                 tokenIt++;
                 break;
             }
-            arguments->emplace_back(parseExpression(Precedence::Lowest));
+            auto argExpression = parseExpression(Precedence::Lowest);
+            assertToken(tokenIt, TokenType::Colon);
+            tokenIt++;
+            auto type = (*tokenIt)->tokenType;
+            auto functionArg =
+                std::make_shared<FunctionArg>(type, argExpression);
+            arguments.emplace_back(functionArg);
         }
         return arguments;
     }

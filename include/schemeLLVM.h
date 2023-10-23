@@ -30,7 +30,7 @@ class SchemeLLVM {
         auto tokens = lexer->lex(program);
         auto parser = std::make_unique<Parser>(tokens);
         auto programNode = parser->parse();
-        compile(programNode);
+        compile(programNode, globalEnv);
         saveModuleToFile("./out.ll");
     }
 
@@ -39,12 +39,15 @@ class SchemeLLVM {
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
     std::shared_ptr<Environment> globalEnv;
+    std::unique_ptr<llvm::IRBuilder<>>
+        varsBuilder;  // Additional builder for start of function
     llvm::Function* fn;
 
     void moduleInit() {
         ctx = std::make_unique<llvm::LLVMContext>();
         module = std::make_unique<llvm::Module>("schemeLLVM", *ctx);
         builder = std::make_unique<llvm::IRBuilder<>>(*ctx);
+        varsBuilder = std::make_unique<llvm::IRBuilder<>>(*ctx);
     }
 
     void saveModuleToFile(const std::string& fileName) {
@@ -53,38 +56,97 @@ class SchemeLLVM {
         module->print(outLL, nullptr);
     }
 
-    void compile(std::shared_ptr<ProgramNode> programNode) {
+    void compile(std::shared_ptr<ProgramNode> programNode, Env_t env) {
         fn = createFunction(
             "main", llvm::FunctionType::get(builder->getInt32Ty(), false),
             globalEnv);
-        gen(programNode);
+        gen(programNode, env, fn);
         builder->CreateRet(builder->getInt32(0));
     }
 
-    void gen(std::shared_ptr<ProgramNode> programNode) {
+    void gen(std::shared_ptr<ProgramNode> programNode,
+             Env_t env,
+             llvm::Function* oldFunc) {
         auto statements = programNode.get()->statements;
         for (auto it = statements.begin(); it < statements.end(); it++) {
-            switch ((*it)->type) {
-                case StatementType::Let: {
-                    auto letStatement = (*it)->letStatement;
-                    llvm::Value* value = genExpr(letStatement->value);
-                    module->getOrInsertGlobal(letStatement->identifier,
-                                              value->getType());
-                    auto variable =
-                        module->getNamedGlobal(letStatement->identifier);
-                    variable->setAlignment(llvm::MaybeAlign(4));
-                    variable->setConstant(false);
-                    variable->setInitializer((llvm::Constant*)value);
-                    break;
+            genStatement(it, env);
+            fn = oldFunc;  // in case statement is a function, you need to
+                           // return the insert point to the older function
+            builder->SetInsertPoint(&fn->getEntryBlock());
+        }
+    }
+    void allocVar(std::string name,
+                  llvm::Type* type,
+                  Env_t env,
+                  llvm::Value* exprValue) {
+        varsBuilder->SetInsertPoint(&fn->getEntryBlock());
+        auto varAlloc = varsBuilder->CreateAlloca(type, 0, name.c_str());
+        builder->CreateStore(exprValue, varAlloc);
+        env->set(name, exprValue);
+    }
+
+    void genStatement(std::vector<std::shared_ptr<StatementNode>>::iterator it,
+                      Env_t env) {
+        switch ((*it)->type) {
+            case StatementType::Let: {
+                auto letStatement = (*it)->letStatement;
+                auto exprValue = genExpr(letStatement->value);
+                switch (letStatement->value->type) {
+                    case ExpressionType::String: {
+                        allocVar(letStatement->identifier,
+                                 builder->getInt8Ty()->getPointerTo(), env,
+                                 exprValue);
+                        break;
+                    }
+                    case ExpressionType::Infix: {
+                        allocVar(letStatement->identifier,
+                                 builder->getInt32Ty(), env, exprValue);
+                        break;
+                    }
+                    case ExpressionType::Number: {
+                        allocVar(letStatement->identifier,
+                                 builder->getInt32Ty(), env, exprValue);
+                        break;
+                    }
+                    default: {
+                        assert(false && "Should not hit this");
+                    }
                 }
-                case StatementType::Expression: {
-                    genExpr((*it)->expressionStatement->expression);
-                    break;
+                // llvm::Value* value = genExpr(letStatement->value);
+                // module->getOrInsertGlobal(letStatement->identifier,
+                //                           value->getType());
+                // auto variable =
+                //     module->getNamedGlobal(letStatement->identifier);
+                // variable->setAlignment(llvm::MaybeAlign(4));
+                // variable->setConstant(false);
+                // variable->setInitializer((llvm::Constant*)value);
+                break;
+            }
+            case StatementType::Expression: {
+                genExpr((*it)->expressionStatement->expression);
+                break;
+            }
+            case StatementType::Function: {
+                auto newFuncEnv = std::make_shared<Environment>(
+                    std::map<std::string, llvm::Value*>(), globalEnv);
+                auto newFunc = createFunction(
+                    (*it)->funcStatement->name,
+                    llvm::FunctionType::get(builder->getInt32Ty(), false),
+                    newFuncEnv);
+                fn = newFunc;
+                auto statements = (*it)->funcStatement->body->statements;
+                for (auto statementIt = statements.begin();
+                     statementIt < statements.end(); statementIt++) {
+                    genStatement(statementIt, env);
                 }
-                case StatementType::Block:
-                case StatementType::Return: {
-                    todo();
-                }
+                builder->CreateRet(builder->getInt32(0));
+                break;
+            }
+            case StatementType::Block: {
+                assert(false && "Should'nt hit this");
+            }
+            case StatementType::Return: {
+                todo();
             }
         }
     }
@@ -130,7 +192,7 @@ class SchemeLLVM {
         if (fn == nullptr) {
             fn = createFunctionProto(fnName, fnType, env);
         }
-        createFunctionBlock(fn);
+        auto currentBlock = createFunctionBlock(fn, fnName + "Entry");
         return fn;
     }
 
@@ -144,9 +206,11 @@ class SchemeLLVM {
         return fn;
     }
 
-    void createFunctionBlock(llvm::Function* fn) {
-        auto entry = createBB("entry", fn);
+    llvm::BasicBlock* createFunctionBlock(llvm::Function* fn,
+                                          std::string entryName) {
+        auto entry = createBB(entryName, fn);
         builder->SetInsertPoint(entry);
+        return entry;
     }
 
     llvm::BasicBlock* createBB(std::string name, llvm::Function* fn = nullptr) {

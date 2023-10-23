@@ -71,7 +71,10 @@ void prettyPrintTokenArray(std::vector<Token*> tokens) {
     }
 }
 
-void testParser(std::string program) {
+void testParseLetStatement() {
+    std::string program = R"(
+      let hello = 3 - 2;
+  )";
     auto lexer = std::make_unique<Lexer>();
     auto tokens = lexer->lex(program);
     for (auto token = tokens.begin(); token < tokens.end(); token++) {
@@ -88,10 +91,40 @@ void testParser(std::string program) {
                ExpressionType::Infix &&
            "Infix expression expected");
 }
+void testParseFunction() {
+    std::string program = R"(
+    defun main(){
+        let hello = 3 - 2;
+    }
+  )";
+    auto lexer = std::make_unique<Lexer>();
+    auto tokens = lexer->lex(program);
+    auto parser = std::make_unique<Parser>(tokens);
+    auto programNode = parser->parse();
+    auto statements = programNode->statements;
+    assert(statements[0]->type == StatementType::Function &&
+           "Function statement expected");
+    assert(statements[0]->funcStatement->name == "main" &&
+           "Function name main expected");
+    assert(statements[0]->funcStatement->body->statements[0]->type ==
+               StatementType::Let &&
+           "Let statement expected");
+    assert(statements[0]
+                   ->funcStatement->body->statements[0]
+                   ->letStatement->value->type == ExpressionType::Infix &&
+           "Infix expression expected");
+    assert(statements[0]
+                   ->funcStatement->body->statements[0]
+                   ->letStatement->identifier == "hello" &&
+           "Identifier hello expected");
+}
 
 int main(int argc, char* argv[]) {
     std::string program = R"(
-    let hello = 3 - 2;
+    defun kmain(x: int): int{
+        let hello = 3 - 2;
+    }
+    let world = 3 + 2;
   )";
     SchemeLLVM vm;
     vm.exec(program);
