@@ -62,7 +62,7 @@ class SchemeLLVM {
     }
 
     void gen(std::shared_ptr<ProgramNode> programNode) {
-        auto statements = programNode->statements;
+        auto statements = programNode.get()->statements;
         for (auto it = statements.begin(); it < statements.end(); it++) {
             switch ((*it)->type) {
                 case StatementType::Let: {
@@ -75,8 +75,12 @@ class SchemeLLVM {
                     variable->setAlignment(llvm::MaybeAlign(4));
                     variable->setConstant(false);
                     variable->setInitializer((llvm::Constant*)value);
+                    break;
                 }
-                case StatementType::Expression:
+                case StatementType::Expression: {
+                    genExpr((*it)->expressionStatement->expression);
+                    break;
+                }
                 case StatementType::Block:
                 case StatementType::Return: {
                     todo();
@@ -101,7 +105,17 @@ class SchemeLLVM {
             case ExpressionType::Infix: {
                 auto lhs = genExpr(expressionNode->infixExpr->lhs);
                 auto rhs = genExpr(expressionNode->infixExpr->rhs);
-                return builder->CreateAdd(lhs, rhs);
+                switch (expressionNode->infixExpr->op) {
+                    case TokenType::Plus: {
+                        return builder->CreateAdd(lhs, rhs);
+                    }
+                    case TokenType::Minus: {
+                        return builder->CreateSub(lhs, rhs);
+                    }
+                    default: {
+                        assert(false && "Invalid operand for infix");
+                    }
+                }
             }
             default:
                 assert(false && "Should'nt hit here");

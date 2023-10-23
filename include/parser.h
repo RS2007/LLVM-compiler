@@ -174,7 +174,7 @@ static std::map<TokenType, Precedence> precedenceMap = {
     {TokenType::Identifier, Precedence::Lowest},
     {TokenType::Number, Precedence::Lowest},
     {TokenType::Plus, Precedence::Sum},
-    {TokenType::Semicolon, Precedence::Lowest},
+    {TokenType::Minus, Precedence::Sum},
     {TokenType::Function, Precedence::Lowest},
 };
 
@@ -210,7 +210,7 @@ class Parser {
             precedenceMap.find((*tokenIt).get()->tokenType);
         auto nextPrecedence = precedenceMapEntry->second;
         while (
-            (*tokenIt).get() != 0x0 &&
+            (*tokenIt).get() != 0x0 && (*(tokenIt + 1)).get() != 0x0 &&
             !((((*(tokenIt + 1)).get()->tokenType) == TokenType::Semicolon)) &&
             precedence < nextPrecedence) {
             std::vector<TokenType> hasInfix = {TokenType::Plus,

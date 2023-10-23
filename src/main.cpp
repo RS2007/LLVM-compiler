@@ -71,14 +71,7 @@ void prettyPrintTokenArray(std::vector<Token*> tokens) {
     }
 }
 
-int main(int argc, char* argv[]) {
-    std::string program = R"(
-    let hello = 3 + 2;
-    defun addone(x){
-      x+1;
-    }
-  )";
-    SchemeLLVM vm;
+void testParser(std::string program) {
     auto lexer = std::make_unique<Lexer>();
     auto tokens = lexer->lex(program);
     for (auto token = tokens.begin(); token < tokens.end(); token++) {
@@ -94,7 +87,13 @@ int main(int argc, char* argv[]) {
     assert(statements[0].get()->letStatement->value->type ==
                ExpressionType::Infix &&
            "Infix expression expected");
+}
 
-    // vm.exec(program);
+int main(int argc, char* argv[]) {
+    std::string program = R"(
+    let hello = 3 - 2;
+  )";
+    SchemeLLVM vm;
+    vm.exec(program);
     return 0;
 }
