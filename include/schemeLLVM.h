@@ -140,6 +140,7 @@ class SchemeLLVM {
                      statementIt < statements.end(); statementIt++) {
                     genStatement(statementIt, newFuncEnv);
                 }
+                env->set((*it)->funcStatement->name, newFunc);
                 break;
             }
             case StatementType::Block: {
@@ -189,6 +190,17 @@ class SchemeLLVM {
                     env->get(expressionNode->identifierExpression->name);
                 return identifier;
                 break;
+            }
+            case ExpressionType::Call: {
+                auto function =
+                    env->get(expressionNode->callExpression->fnName);
+                auto evaledExpressions = std::vector<llvm::Value*>();
+                for (auto arg : expressionNode->callExpression->arguments) {
+                    evaledExpressions.emplace_back(genExpr(arg, env));
+                }
+                auto call = builder->CreateCall((llvm::Function*)(function),
+                                                evaledExpressions);
+                return call;
             }
             default:
                 assert(false && "Should'nt hit here");

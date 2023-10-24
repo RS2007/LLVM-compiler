@@ -106,6 +106,15 @@ class IdentifierExpression {
     IdentifierExpression(std::string name) : name(name) {}
 };
 
+class CallExpression {
+   public:
+    std::string fnName;
+    std::vector<std::shared_ptr<ExpressionNode>> arguments;
+    CallExpression(std::string fnName,
+                   std::vector<std::shared_ptr<ExpressionNode>> arguments)
+        : fnName(fnName), arguments(arguments) {}
+};
+
 class ExpressionNode {
    public:
     ExpressionType type;
@@ -113,6 +122,7 @@ class ExpressionNode {
     std::shared_ptr<IntegerExpression> integerExp;
     std::shared_ptr<InfixExpression> infixExpr;
     std::shared_ptr<IdentifierExpression> identifierExpression;
+    std::shared_ptr<CallExpression> callExpression;
     ExpressionNode(std::shared_ptr<StringExpression> stringExp) {
         this->type = ExpressionType::String;
         this->stringExp = stringExp;
@@ -128,6 +138,8 @@ class ExpressionNode {
     ExpressionNode(std::shared_ptr<IdentifierExpression> identifierExpression)
         : identifierExpression(identifierExpression),
           type(ExpressionType::Identifier) {}
+    ExpressionNode(std::shared_ptr<CallExpression> callExpression)
+        : callExpression(callExpression), type(ExpressionType::Call) {}
 };
 
 class LetStatement {
@@ -201,7 +213,7 @@ static std::map<TokenType, Precedence> precedenceMap = {
     {TokenType::Plus, Precedence::Sum},
     {TokenType::Minus, Precedence::Sum},
     {TokenType::Function, Precedence::Lowest},
-};
+    {TokenType::LParen, Precedence::Call}};
 
 class Parser {
    public:
@@ -238,11 +250,11 @@ class Parser {
             (*tokenIt).get() != 0x0 && (*(tokenIt + 1)).get() != 0x0 &&
             !((((*(tokenIt + 1)).get()->tokenType) == TokenType::Semicolon)) &&
             precedence < nextPrecedence) {
-            std::vector<TokenType> hasInfix = {TokenType::Plus,
-                                               TokenType::Minus};
+            std::vector<TokenType> hasInfix = {
+                TokenType::Plus, TokenType::Minus, TokenType::LParen};
             if (std::find(hasInfix.begin(), hasInfix.end(),
                           (*tokenIt).get()->tokenType) != hasInfix.end()) {
-                lhs = parseInfix(lhs);
+                lhs = parseInfix(precedence, lhs);
             }
             return lhs;
         }
@@ -288,6 +300,8 @@ class Parser {
             case TokenType::Return: {
                 tokenIt++;
                 auto returnValue = parseExpression(Precedence::Lowest);
+                assertToken(tokenIt, TokenType::Semicolon);
+                tokenIt++;
                 auto returnStatement =
                     std::make_shared<ReturnStatement>(returnValue);
                 statement = std::make_shared<StatementNode>(returnStatement);
@@ -417,7 +431,24 @@ class Parser {
             std::make_shared<ExpressionNode>(stringExpression);
         return expressionNode;
     }
+    std::shared_ptr<ExpressionNode> parseCallExpression(
+        Precedence precedence,
+        std::shared_ptr<ExpressionNode> left) {
+        auto expressions = std::vector<std::shared_ptr<ExpressionNode>>();
+        while ((*tokenIt)->tokenType != TokenType::RParen) {
+            expressions.emplace_back(parseExpression(Precedence::Lowest));
+            if ((*tokenIt)->tokenType == TokenType::Comma) {
+                tokenIt++;
+                continue;
+            }
+        }
+        auto callExpression = std::make_shared<CallExpression>(
+            left->identifierExpression->name, expressions);
+        tokenIt++;
+        return std::make_shared<ExpressionNode>(callExpression);
+    }
     std::shared_ptr<ExpressionNode> parseInfix(
+        Precedence precedence,
         std::shared_ptr<ExpressionNode> left) {
         switch ((*tokenIt).get()->tokenType) {
             case TokenType::Plus:
@@ -434,6 +465,10 @@ class Parser {
                 auto expressionNode =
                     std::make_shared<ExpressionNode>(infixExpression);
                 return expressionNode;
+            }
+            case TokenType::LParen: {
+                tokenIt++;
+                return parseCallExpression(precedence, left);
             }
             default:
                 std::cout << (*tokenIt).get()->tokenType << "\n";

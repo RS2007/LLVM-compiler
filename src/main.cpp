@@ -119,12 +119,43 @@ void testParseFunction() {
            "Identifier hello expected");
 }
 
+void testParseCall() {
+    std::string program = R"(
+    defun add(a: int, b: int): int{
+         return a + b;
+    }
+    let five = add(3,2);
+  )";
+    auto lexer = std::make_unique<Lexer>();
+    auto tokens = lexer->lex(program);
+    auto parser = std::make_unique<Parser>(tokens);
+    auto programNode = parser->parse();
+    auto statements = programNode->statements;
+    assert(statements[1]->type == StatementType::Let && "Expected let");
+    assert(statements[1]->letStatement->identifier == "five" &&
+           "Expected five");
+    assert(statements[1]->letStatement->value->type == ExpressionType::Call &&
+           "Expected call expression");
+    assert(statements[1]->letStatement->value->callExpression->fnName ==
+               "add" &&
+           "Expected sum function name");
+    assert(statements[1]
+                   ->letStatement->value->callExpression->arguments[0]
+                   ->integerExp->intValue == 3 &&
+           "Expected 3");
+    assert(statements[1]
+                   ->letStatement->value->callExpression->arguments[1]
+                   ->integerExp->intValue == 2 &&
+           "Expected 3");
+}
+
 int main(int argc, char* argv[]) {
     std::string program = R"(
     defun add(a: int, b: int): int{
          return a + b;
     }
-    let hello = 3 + 2;
+    let five = add(3,2);
+    return five;
   )";
     SchemeLLVM vm;
     vm.exec(program);
