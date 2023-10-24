@@ -69,10 +69,9 @@ class SchemeLLVM {
              llvm::Function* oldFunc) {
         auto statements = programNode.get()->statements;
         for (auto it = statements.begin(); it < statements.end(); it++) {
-            genStatement(it, env);
+            genStatement(it, env, oldFunc);
             fn = oldFunc;  // in case statement is a function, you need to
                            // return the insert point to the older function
-            builder->SetInsertPoint(&fn->getEntryBlock());
         }
     }
     void allocVar(std::string name,
@@ -86,7 +85,8 @@ class SchemeLLVM {
     }
 
     void genStatement(std::vector<std::shared_ptr<StatementNode>>::iterator it,
-                      Env_t env) {
+                      Env_t env,
+                      llvm::Function* oldFunc) {
         switch ((*it)->type) {
             case StatementType::Let: {
                 auto letStatement = (*it)->letStatement;
@@ -105,6 +105,32 @@ class SchemeLLVM {
             }
             case StatementType::Expression: {
                 genExpr((*it)->expressionStatement->expression, env);
+                break;
+            }
+            case StatementType::If: {
+                // INFO: Should if return expressions? If yes, need to add phi
+                // functions
+                auto condition = genExpr((*it)->ifStatement->condition, env);
+                auto ifTrueBlock = createBB("ifTrue", fn);
+                auto ifFalseBlock = createBB("ifFalse", fn);
+                auto ifEndBlock = createBB("ifEnd", fn);
+                builder->CreateCondBr(condition, ifTrueBlock, ifFalseBlock);
+                builder->SetInsertPoint(ifTrueBlock);
+                auto trueBlock = (*it)->ifStatement->trueBlock;
+                for (auto statementIt = trueBlock->statements.begin();
+                     statementIt < trueBlock->statements.end(); statementIt++) {
+                    genStatement(statementIt, env, oldFunc);
+                }
+                builder->CreateBr(ifEndBlock);
+                builder->SetInsertPoint(ifFalseBlock);
+                auto falseBlock = (*it)->ifStatement->falseBlock;
+                for (auto statementIt = falseBlock->statements.begin();
+                     statementIt < falseBlock->statements.end();
+                     statementIt++) {
+                    genStatement(statementIt, env, oldFunc);
+                }
+                builder->CreateBr(ifEndBlock);
+                builder->SetInsertPoint(ifEndBlock);
                 break;
             }
             case StatementType::Function: {
@@ -138,9 +164,10 @@ class SchemeLLVM {
                 }
                 for (auto statementIt = statements.begin();
                      statementIt < statements.end(); statementIt++) {
-                    genStatement(statementIt, newFuncEnv);
+                    genStatement(statementIt, newFuncEnv, oldFunc);
                 }
                 env->set((*it)->funcStatement->name, newFunc);
+                builder->SetInsertPoint(&oldFunc->getEntryBlock());
                 break;
             }
             case StatementType::Block: {
@@ -178,6 +205,12 @@ class SchemeLLVM {
                     }
                     case TokenType::Minus: {
                         return builder->CreateSub(lhs, rhs);
+                    }
+                    case TokenType::LessThan: {
+                        return builder->CreateICmpULT(lhs, rhs);
+                    }
+                    case TokenType::GreaterThan: {
+                        return builder->CreateICmpUGT(lhs, rhs);
                     }
                     default: {
                         assert(false && "Invalid operand for infix");

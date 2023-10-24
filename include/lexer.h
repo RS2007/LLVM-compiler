@@ -28,7 +28,11 @@ enum class TokenType {
     IntType,
     StringType,
     VoidType,
-    Colon
+    Colon,
+    If,
+    Else,
+    LessThan,
+    GreaterThan,
 };
 
 std::ostream& operator<<(std::ostream& strm, TokenType tt) {
@@ -36,7 +40,8 @@ std::ostream& operator<<(std::ostream& strm, TokenType tt) {
         "Number", "String",  "Identifier", "LParen",     "RParen",
         "Let",    "LSquare", "RSquare",    "Semicolon",  "Plus",
         "Minus",  "Equal",   "Comma",      "Return",     "Function",
-        "LBrace", "RBrace",  "IntType",    "StringType", "Colon"};
+        "LBrace", "RBrace",  "IntType",    "StringType", "Colon",
+        "If",     "Else",    "LessThan",   "GreaterThan"};
     return strm << tokenNames[static_cast<int>(tt)];
 }
 
@@ -145,6 +150,14 @@ class Lexer {
                 auto token = std::make_shared<Token>(TokenType::Colon);
                 tokens.emplace_back(token);
                 it++;
+            } else if (*it == '<') {
+                auto token = std::make_shared<Token>(TokenType::LessThan);
+                tokens.emplace_back(token);
+                it++;
+            } else if (*it == '>') {
+                auto token = std::make_shared<Token>(TokenType::GreaterThan);
+                tokens.emplace_back(token);
+                it++;
             } else {
                 std::string identifierValue;
                 while (isalpha(*it)) {
@@ -164,6 +177,10 @@ class Lexer {
                     token = std::make_shared<Token>(TokenType::StringType);
                 } else if (identifierValue == "void") {
                     token = std::make_shared<Token>(TokenType::VoidType);
+                } else if (identifierValue == "if") {
+                    token = std::make_shared<Token>(TokenType::If);
+                } else if (identifierValue == "else") {
+                    token = std::make_shared<Token>(TokenType::Else);
                 } else {
                     token = std::make_shared<Token>(
                         Token(TokenType::Identifier, identifierValue));

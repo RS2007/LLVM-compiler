@@ -19,7 +19,7 @@ enum class NodeType {
     Expression,
 };
 
-enum class StatementType { Let, Block, Return, Expression, Function };
+enum class StatementType { Let, Block, Return, Expression, Function, If };
 
 enum class Precedence {
     Lowest,
@@ -37,7 +37,6 @@ enum class ExpressionType {
     Identifier,
     Prefix,
     Infix,
-    If,
     Call,
     String,
     Array,
@@ -69,6 +68,17 @@ class InfixExpression {
         this->op = op;
         this->rhs = rhs;
     }
+};
+
+class IfStatement {
+   public:
+    std::shared_ptr<ExpressionNode> condition;
+    std::shared_ptr<BlockStatement> trueBlock;
+    std::shared_ptr<BlockStatement> falseBlock;
+    IfStatement(std::shared_ptr<ExpressionNode> condition,
+                std::shared_ptr<BlockStatement> trueBlock,
+                std::shared_ptr<BlockStatement> falseBlock)
+        : condition(condition), trueBlock(trueBlock), falseBlock(falseBlock) {}
 };
 
 class FunctionArg {
@@ -177,6 +187,7 @@ class StatementNode {
     std::shared_ptr<ExpressionStatement> expressionStatement;
     std::shared_ptr<FunctionStatement> funcStatement;
     std::shared_ptr<ReturnStatement> returnStatement;
+    std::shared_ptr<IfStatement> ifStatement;
     StatementNode() {}
     StatementNode(std::shared_ptr<LetStatement> letStatement)
         : type(StatementType::Let), letStatement(letStatement) {}
@@ -188,6 +199,8 @@ class StatementNode {
         this->type = StatementType::Expression;
         this->expressionStatement = expressionStatement;
     }
+    StatementNode(std::shared_ptr<IfStatement> ifStatement)
+        : ifStatement(ifStatement), type(StatementType::If) {}
 };
 
 class ProgramNode {
@@ -213,7 +226,9 @@ static std::map<TokenType, Precedence> precedenceMap = {
     {TokenType::Plus, Precedence::Sum},
     {TokenType::Minus, Precedence::Sum},
     {TokenType::Function, Precedence::Lowest},
-    {TokenType::LParen, Precedence::Call}};
+    {TokenType::LParen, Precedence::Call},
+    {TokenType::LessThan, Precedence::Lessgreater},
+    {TokenType::GreaterThan, Precedence::Lessgreater}};
 
 class Parser {
    public:
@@ -251,7 +266,8 @@ class Parser {
             !((((*(tokenIt + 1)).get()->tokenType) == TokenType::Semicolon)) &&
             precedence < nextPrecedence) {
             std::vector<TokenType> hasInfix = {
-                TokenType::Plus, TokenType::Minus, TokenType::LParen};
+                TokenType::Plus, TokenType::Minus, TokenType::LParen,
+                TokenType::LessThan, TokenType::GreaterThan};
             if (std::find(hasInfix.begin(), hasInfix.end(),
                           (*tokenIt).get()->tokenType) != hasInfix.end()) {
                 lhs = parseInfix(precedence, lhs);
@@ -311,6 +327,10 @@ class Parser {
                 statement = parseFunction();
                 break;
             }
+            case TokenType::If: {
+                statement = parseIf();
+                break;
+            }
             default: {
                 std::cout << "From statement " << (*tokenIt).get()->tokenType
                           << "\n";
@@ -322,6 +342,22 @@ class Parser {
                 break;
             }
         }
+        return statement;
+    }
+    std::shared_ptr<StatementNode> parseIf() {
+        tokenIt++;
+        assertToken(tokenIt, TokenType::LParen);
+        tokenIt++;
+        auto condition = parseExpression(Precedence::Lowest);
+        assertToken(tokenIt, TokenType::RParen);
+        tokenIt++;
+        auto trueBody = parseBlockStatement();
+        assertToken(tokenIt, TokenType::Else);
+        tokenIt++;
+        auto falseBody = parseBlockStatement();
+        auto ifStatement =
+            std::make_shared<IfStatement>(condition, trueBody, falseBody);
+        auto statement = std::make_shared<StatementNode>(ifStatement);
         return statement;
     }
 
@@ -350,13 +386,13 @@ class Parser {
         // TODO:have an assert for the return types
         auto returnType = (*tokenIt)->tokenType;
         tokenIt++;
-        auto body = parseFunctionBody();
+        auto body = parseBlockStatement();
         auto funcStatement = std::make_shared<FunctionStatement>(
             name, arguments, body, returnType);
         return std::make_shared<StatementNode>(funcStatement);
     }
 
-    std::shared_ptr<BlockStatement> parseFunctionBody() {
+    std::shared_ptr<BlockStatement> parseBlockStatement() {
         auto statements = std::vector<std::shared_ptr<StatementNode>>();
         assertToken(tokenIt, TokenType::LBrace);
         tokenIt++;
@@ -452,7 +488,9 @@ class Parser {
         std::shared_ptr<ExpressionNode> left) {
         switch ((*tokenIt).get()->tokenType) {
             case TokenType::Plus:
-            case TokenType::Minus: {
+            case TokenType::Minus:
+            case TokenType::LessThan:
+            case TokenType::GreaterThan: {
                 std::cout << "Parsing infix plus/minus"
                           << "\n";
                 auto currentOp = (*tokenIt).get()->tokenType;

@@ -149,13 +149,63 @@ void testParseCall() {
            "Expected 3");
 }
 
+void testIfStatement() {
+    std::string program = R"(
+    defun add(a: int, b: int): int{
+         return a + b;
+    }
+    if(3 > 2){
+      printf("3 is greater than 2");
+    }else{
+      printf("3 is less than 2");
+    }
+  )";
+    auto lexer = std::make_unique<Lexer>();
+    auto tokens = lexer->lex(program);
+    auto parser = std::make_unique<Parser>(tokens);
+    auto programNode = parser->parse();
+    auto statements = programNode->statements;
+    assert(statements[1]->type == StatementType::If && "Expected IF Statement");
+    assert(statements[1]->ifStatement->condition->type ==
+               ExpressionType::Infix &&
+           "Expected infix for condition");
+    assert(statements[1]->ifStatement->condition->infixExpr->op ==
+               TokenType::GreaterThan &&
+           "Expected > operation");
+    assert(statements[1]
+                   ->ifStatement->condition->infixExpr->lhs->integerExp
+                   ->intValue == 3 &&
+           "Expected 3");
+    assert(statements[1]
+                   ->ifStatement->condition->infixExpr->rhs->integerExp
+                   ->intValue == 2 &&
+           "Expected 2");
+    assert(statements[1]
+                   ->ifStatement->trueBlock->statements[0]
+                   ->expressionStatement->expression->callExpression->fnName ==
+               "printf" &&
+           "Expected printf");
+    assert(statements[1]
+                   ->ifStatement->falseBlock->statements[0]
+                   ->expressionStatement->expression->callExpression->fnName ==
+               "printf" &&
+           "Expected printf");
+}
+
 int main(int argc, char* argv[]) {
     std::string program = R"(
     defun add(a: int, b: int): int{
          return a + b;
     }
-    let five = add(3,2);
-    let ans = printf("%d",five);
+    if(3 > 2){
+      if(4 > 1){
+        printf("3 is greater than 2 and 4 is greater than 1");
+      }else{
+        printf("3 is greater than 2 and 4 is less than 1");
+      }
+    }else{
+      printf("3 is less than 2");
+    }
   )";
     SchemeLLVM vm;
     vm.exec(program);
