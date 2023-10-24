@@ -121,10 +121,10 @@ void testParseFunction() {
 
 int main(int argc, char* argv[]) {
     std::string program = R"(
-    defun kmain(x: int): int{
-        let hello = 3 - 2;
+    defun add(a: int, b: int): int{
+         return a + b;
     }
-    let world = 3 + 2;
+    let hello = 3 + 2;
   )";
     SchemeLLVM vm;
     vm.exec(program);

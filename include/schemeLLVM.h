@@ -90,28 +90,9 @@ class SchemeLLVM {
         switch ((*it)->type) {
             case StatementType::Let: {
                 auto letStatement = (*it)->letStatement;
-                auto exprValue = genExpr(letStatement->value);
-                switch (letStatement->value->type) {
-                    case ExpressionType::String: {
-                        allocVar(letStatement->identifier,
-                                 builder->getInt8Ty()->getPointerTo(), env,
-                                 exprValue);
-                        break;
-                    }
-                    case ExpressionType::Infix: {
-                        allocVar(letStatement->identifier,
-                                 builder->getInt32Ty(), env, exprValue);
-                        break;
-                    }
-                    case ExpressionType::Number: {
-                        allocVar(letStatement->identifier,
-                                 builder->getInt32Ty(), env, exprValue);
-                        break;
-                    }
-                    default: {
-                        assert(false && "Should not hit this");
-                    }
-                }
+                auto exprValue = genExpr(letStatement->value, env);
+                allocVar(letStatement->identifier, exprValue->getType(), env,
+                         exprValue);
                 // llvm::Value* value = genExpr(letStatement->value);
                 // module->getOrInsertGlobal(letStatement->identifier,
                 //                           value->getType());
@@ -123,35 +104,58 @@ class SchemeLLVM {
                 break;
             }
             case StatementType::Expression: {
-                genExpr((*it)->expressionStatement->expression);
+                genExpr((*it)->expressionStatement->expression, env);
                 break;
             }
             case StatementType::Function: {
+                std::vector<llvm::Type*> paramTypes{};
+                for (auto arg : (*it)->funcStatement->arguments) {
+                    llvm::Type* type =
+                        arg->type == TokenType::IntType
+                            ? dynamic_cast<llvm::Type*>(builder->getInt32Ty())
+                            : builder->getInt8Ty()->getPointerTo();
+                    paramTypes.emplace_back(type);
+                }
                 auto newFuncEnv = std::make_shared<Environment>(
                     std::map<std::string, llvm::Value*>(), globalEnv);
-                auto newFunc = createFunction(
-                    (*it)->funcStatement->name,
-                    llvm::FunctionType::get(builder->getInt32Ty(), false),
-                    newFuncEnv);
+                auto functionReturnType =
+                    (*it)->funcStatement->returnType == TokenType::IntType
+                        ? dynamic_cast<llvm::Type*>(builder->getInt32Ty())
+                        : builder->getInt8Ty()->getPointerTo();
+                auto newFunc =
+                    createFunction((*it)->funcStatement->name,
+                                   llvm::FunctionType::get(functionReturnType,
+                                                           paramTypes, false),
+                                   newFuncEnv);
                 fn = newFunc;
                 auto statements = (*it)->funcStatement->body->statements;
+                int i = 0;  // INFO: fn->args() gives an iterator thus this
+                            // shabby loop
+                for (auto& arg : fn->args()) {
+                    auto argFromAST = (*it)->funcStatement->arguments[i++];
+                    arg.setName(argFromAST->name);
+                    allocVar(argFromAST->name, arg.getType(), newFuncEnv, &arg);
+                }
                 for (auto statementIt = statements.begin();
                      statementIt < statements.end(); statementIt++) {
-                    genStatement(statementIt, env);
+                    genStatement(statementIt, newFuncEnv);
                 }
-                builder->CreateRet(builder->getInt32(0));
                 break;
             }
             case StatementType::Block: {
                 assert(false && "Should'nt hit this");
             }
             case StatementType::Return: {
-                todo();
+                auto returnVal = (*it)->returnStatement->returnValue;
+                auto returnExp = genExpr(returnVal, env);
+                builder->CreateRet(returnExp);
+                break;
             }
         }
     }
 
-    llvm::Value* genExpr(std::shared_ptr<ExpressionNode> expressionNode) {
+    llvm::Value* genExpr(std::shared_ptr<ExpressionNode> expressionNode,
+                         Env_t env) {
         llvm::Value* dummy;
         switch (expressionNode->type) {
             case ExpressionType::String: {
@@ -165,8 +169,8 @@ class SchemeLLVM {
                 return num;
             }
             case ExpressionType::Infix: {
-                auto lhs = genExpr(expressionNode->infixExpr->lhs);
-                auto rhs = genExpr(expressionNode->infixExpr->rhs);
+                auto lhs = genExpr(expressionNode->infixExpr->lhs, env);
+                auto rhs = genExpr(expressionNode->infixExpr->rhs, env);
                 switch (expressionNode->infixExpr->op) {
                     case TokenType::Plus: {
                         return builder->CreateAdd(lhs, rhs);
@@ -178,6 +182,13 @@ class SchemeLLVM {
                         assert(false && "Invalid operand for infix");
                     }
                 }
+                break;
+            }
+            case ExpressionType::Identifier: {
+                auto identifier =
+                    env->get(expressionNode->identifierExpression->name);
+                return identifier;
+                break;
             }
             default:
                 assert(false && "Should'nt hit here");

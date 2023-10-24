@@ -74,9 +74,12 @@ class InfixExpression {
 class FunctionArg {
    public:
     TokenType type;
+    std::string name;
     std::shared_ptr<ExpressionNode> value;
-    FunctionArg(TokenType type, std::shared_ptr<ExpressionNode> value)
-        : type(type), value(value) {}
+    FunctionArg(TokenType type,
+                std::shared_ptr<ExpressionNode> value,
+                std::string name)
+        : type(type), value(value), name(name) {}
 };
 
 class FunctionStatement {
@@ -143,6 +146,9 @@ class BlockStatement {
 
 class ReturnStatement {
    public:
+    std::shared_ptr<ExpressionNode> returnValue;
+    ReturnStatement(std::shared_ptr<ExpressionNode> returnValue)
+        : returnValue(returnValue) {}
 };
 
 class ExpressionStatement {
@@ -158,11 +164,14 @@ class StatementNode {
     std::shared_ptr<LetStatement> letStatement;
     std::shared_ptr<ExpressionStatement> expressionStatement;
     std::shared_ptr<FunctionStatement> funcStatement;
+    std::shared_ptr<ReturnStatement> returnStatement;
     StatementNode() {}
     StatementNode(std::shared_ptr<LetStatement> letStatement)
         : type(StatementType::Let), letStatement(letStatement) {}
     StatementNode(std::shared_ptr<FunctionStatement> functionStatement)
         : type(StatementType::Function), funcStatement(functionStatement) {}
+    StatementNode(std::shared_ptr<ReturnStatement> returnStatement)
+        : type(StatementType::Return), returnStatement(returnStatement) {}
     StatementNode(std::shared_ptr<ExpressionStatement> expressionStatement) {
         this->type = StatementType::Expression;
         this->expressionStatement = expressionStatement;
@@ -277,7 +286,12 @@ class Parser {
                 break;
             }
             case TokenType::Return: {
-                assert(false && "Unimplemented");
+                tokenIt++;
+                auto returnValue = parseExpression(Precedence::Lowest);
+                auto returnStatement =
+                    std::make_shared<ReturnStatement>(returnValue);
+                statement = std::make_shared<StatementNode>(returnStatement);
+                break;
             }
             case TokenType::Function: {
                 statement = parseFunction();
@@ -359,7 +373,6 @@ class Parser {
             }
             tokenIt++;
             if ((*tokenIt).get()->tokenType == TokenType::Comma) {
-                tokenIt++;
                 continue;
             }
             // For special case when there are no arguments
@@ -368,11 +381,13 @@ class Parser {
                 break;
             }
             auto argExpression = parseExpression(Precedence::Lowest);
+            assert(argExpression->type == ExpressionType::Identifier &&
+                   "Should be an identifier");
             assertToken(tokenIt, TokenType::Colon);
             tokenIt++;
             auto type = (*tokenIt)->tokenType;
-            auto functionArg =
-                std::make_shared<FunctionArg>(type, argExpression);
+            auto functionArg = std::make_shared<FunctionArg>(
+                type, argExpression, argExpression->identifierExpression->name);
             arguments.emplace_back(functionArg);
         }
         return arguments;
