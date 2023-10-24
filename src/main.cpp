@@ -155,7 +155,7 @@ int main(int argc, char* argv[]) {
          return a + b;
     }
     let five = add(3,2);
-    return five;
+    let ans = printf("%d",five);
   )";
     SchemeLLVM vm;
     vm.exec(program);

@@ -192,8 +192,13 @@ class SchemeLLVM {
                 break;
             }
             case ExpressionType::Call: {
-                auto function =
-                    env->get(expressionNode->callExpression->fnName);
+                llvm::Function* function;
+                if (expressionNode->callExpression->fnName == "printf") {
+                    function = module->getFunction("printf");
+                } else {
+                    function = static_cast<llvm::Function*>(
+                        env->get(expressionNode->callExpression->fnName));
+                }
                 auto evaledExpressions = std::vector<llvm::Value*>();
                 for (auto arg : expressionNode->callExpression->arguments) {
                     evaledExpressions.emplace_back(genExpr(arg, env));
