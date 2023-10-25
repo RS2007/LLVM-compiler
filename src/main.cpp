@@ -113,9 +113,9 @@ void testParseFunction() {
                    ->funcStatement->body->statements[0]
                    ->letStatement->value->type == ExpressionType::Infix &&
            "Infix expression expected");
-    assert(statements[0]
-                   ->funcStatement->body->statements[0]
-                   ->letStatement->identifier == "hello" &&
+    assert(*(statements[0]
+                 ->funcStatement->body->statements[0]
+                 ->letStatement->identifier) == "hello" &&
            "Identifier hello expected");
 }
 
@@ -132,11 +132,11 @@ void testParseCall() {
     auto programNode = parser->parse();
     auto statements = programNode->statements;
     assert(statements[1]->type == StatementType::Let && "Expected let");
-    assert(statements[1]->letStatement->identifier == "five" &&
+    assert(*(statements[1]->letStatement->identifier) == "five" &&
            "Expected five");
     assert(statements[1]->letStatement->value->type == ExpressionType::Call &&
            "Expected call expression");
-    assert(statements[1]->letStatement->value->callExpression->fnName ==
+    assert(*(statements[1]->letStatement->value->callExpression->fnName) ==
                "add" &&
            "Expected sum function name");
     assert(statements[1]
@@ -180,33 +180,84 @@ void testIfStatement() {
                    ->ifStatement->condition->infixExpr->rhs->integerExp
                    ->intValue == 2 &&
            "Expected 2");
-    assert(statements[1]
-                   ->ifStatement->trueBlock->statements[0]
-                   ->expressionStatement->expression->callExpression->fnName ==
+    assert(*(statements[1]
+                 ->ifStatement->trueBlock->statements[0]
+                 ->expressionStatement->expression->callExpression->fnName) ==
                "printf" &&
            "Expected printf");
-    assert(statements[1]
-                   ->ifStatement->falseBlock->statements[0]
-                   ->expressionStatement->expression->callExpression->fnName ==
+    assert(*(statements[1]
+                 ->ifStatement->falseBlock->statements[0]
+                 ->expressionStatement->expression->callExpression->fnName) ==
                "printf" &&
            "Expected printf");
 }
 
-int main(int argc, char* argv[]) {
+void testParseFor() {
     std::string program = R"(
     defun add(a: int, b: int): int{
          return a + b;
     }
-    if(3 > 2){
-      if(4 > 1){
-        printf("3 is greater than 2 and 4 is greater than 1");
-      }else{
-        printf("3 is greater than 2 and 4 is less than 1");
-      }
-    }else{
-      printf("3 is less than 2");
+    for(let i = 0;i < 10;i = i+1){
+      printf("%d",i);
     }
   )";
+    auto lexer = std::make_unique<Lexer>();
+    auto tokens = lexer->lex(program);
+    auto parser = std::make_unique<Parser>(tokens);
+    auto programNode = parser->parse();
+    auto statements = programNode->statements;
+    assert(statements[1]->type == StatementType::For &&
+           "Expected for statement");
+    assert(*(statements[1]
+                 ->forStatement->initialCondition->letStatement->identifier) ==
+               "i" &&
+           "Expected i");
+    assert(statements[1]
+                   ->forStatement->initialCondition->letStatement->value
+                   ->integerExp->intValue == 0 &&
+           "Expected 0");
+    assert(*(statements[1]
+                 ->forStatement->continueCondition->infixExpr->lhs
+                 ->identifierExpression->name) == "i" &&
+           "Expected i");
+    assert(statements[1]
+                   ->forStatement->continueCondition->infixExpr->rhs->integerExp
+                   ->intValue == 10 &&
+           "Expected 0");
+    assert(*(statements[1]
+                 ->forStatement->updateCondition->expressionStatement
+                 ->expression->infixExpr->lhs->identifierExpression->name) ==
+               "i" &&
+           "Expected i");
+    assert(
+        statements[1]
+                ->forStatement->updateCondition->expressionStatement->expression
+                ->infixExpr->rhs->infixExpr->rhs->integerExp->intValue == 1 &&
+        "Expected 1");
+    assert(*(statements[1]
+                 ->forStatement->body->statements[0]
+                 ->expressionStatement->expression->callExpression->fnName) ==
+               "printf" &&
+           "Expected printf");
+    assert(statements[1]->forStatement->continueCondition->infixExpr->op ==
+               TokenType::LessThan &&
+           "Expected less than in infix for continue condition");
+    assert(statements[1]
+                   ->forStatement->updateCondition->expressionStatement
+                   ->expression->infixExpr->op == TokenType::Equal &&
+           "Expected equal in infix for update condition");
+}
+
+int main(int argc, char* argv[]) {
+    std::string program = R"(
+      defun add(a: int, b: int): int{
+           return a + b;
+      }
+      for(let i = 0;i < 10;i = i+1){
+          printf("%d\n",add(i,1));
+      }
+    )";
+    testParseFor();
     SchemeLLVM vm;
     vm.exec(program);
     return 0;

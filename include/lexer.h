@@ -33,6 +33,8 @@ enum class TokenType {
     Else,
     LessThan,
     GreaterThan,
+    For,
+    While
 };
 
 std::ostream& operator<<(std::ostream& strm, TokenType tt) {
@@ -181,6 +183,10 @@ class Lexer {
                     token = std::make_shared<Token>(TokenType::If);
                 } else if (identifierValue == "else") {
                     token = std::make_shared<Token>(TokenType::Else);
+                } else if (identifierValue == "for") {
+                    token = std::make_shared<Token>(TokenType::For);
+                } else if (identifierValue == "while") {
+                    token = std::make_shared<Token>(TokenType::While);
                 } else {
                     token = std::make_shared<Token>(
                         Token(TokenType::Identifier, identifierValue));

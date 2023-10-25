@@ -69,7 +69,7 @@ class SchemeLLVM {
              llvm::Function* oldFunc) {
         auto statements = programNode.get()->statements;
         for (auto it = statements.begin(); it < statements.end(); it++) {
-            genStatement(it, env, oldFunc);
+            genStatement(*it, env, oldFunc);
             fn = oldFunc;  // in case statement is a function, you need to
                            // return the insert point to the older function
         }
@@ -81,17 +81,17 @@ class SchemeLLVM {
         varsBuilder->SetInsertPoint(&fn->getEntryBlock());
         auto varAlloc = varsBuilder->CreateAlloca(type, 0, name.c_str());
         builder->CreateStore(exprValue, varAlloc);
-        env->set(name, exprValue);
+        env->set(name, varAlloc);
     }
 
-    void genStatement(std::vector<std::shared_ptr<StatementNode>>::iterator it,
+    void genStatement(std::shared_ptr<StatementNode> stmt,
                       Env_t env,
                       llvm::Function* oldFunc) {
-        switch ((*it)->type) {
+        switch (stmt->type) {
             case StatementType::Let: {
-                auto letStatement = (*it)->letStatement;
+                auto letStatement = stmt->letStatement;
                 auto exprValue = genExpr(letStatement->value, env);
-                allocVar(letStatement->identifier, exprValue->getType(), env,
+                allocVar(*(letStatement->identifier), exprValue->getType(), env,
                          exprValue);
                 // llvm::Value* value = genExpr(letStatement->value);
                 // module->getOrInsertGlobal(letStatement->identifier,
@@ -104,38 +104,64 @@ class SchemeLLVM {
                 break;
             }
             case StatementType::Expression: {
-                genExpr((*it)->expressionStatement->expression, env);
+                genExpr(stmt->expressionStatement->expression, env);
                 break;
             }
             case StatementType::If: {
                 // INFO: Should if return expressions? If yes, need to add phi
                 // functions
-                auto condition = genExpr((*it)->ifStatement->condition, env);
+                auto condition = genExpr(stmt->ifStatement->condition, env);
                 auto ifTrueBlock = createBB("ifTrue", fn);
                 auto ifFalseBlock = createBB("ifFalse", fn);
                 auto ifEndBlock = createBB("ifEnd", fn);
                 builder->CreateCondBr(condition, ifTrueBlock, ifFalseBlock);
                 builder->SetInsertPoint(ifTrueBlock);
-                auto trueBlock = (*it)->ifStatement->trueBlock;
+                auto trueBlock = stmt->ifStatement->trueBlock;
                 for (auto statementIt = trueBlock->statements.begin();
                      statementIt < trueBlock->statements.end(); statementIt++) {
-                    genStatement(statementIt, env, oldFunc);
+                    genStatement(*statementIt, env, oldFunc);
                 }
                 builder->CreateBr(ifEndBlock);
                 builder->SetInsertPoint(ifFalseBlock);
-                auto falseBlock = (*it)->ifStatement->falseBlock;
+                auto falseBlock = stmt->ifStatement->falseBlock;
                 for (auto statementIt = falseBlock->statements.begin();
                      statementIt < falseBlock->statements.end();
                      statementIt++) {
-                    genStatement(statementIt, env, oldFunc);
+                    genStatement(*statementIt, env, oldFunc);
                 }
                 builder->CreateBr(ifEndBlock);
                 builder->SetInsertPoint(ifEndBlock);
                 break;
             }
+            case StatementType::For: {
+                auto forEnv = std::make_shared<Environment>(
+                    std::map<std::string, llvm::Value*>(), env);
+                genStatement(stmt->forStatement->initialCondition, forEnv,
+                             oldFunc);
+                auto forConditionBlock = createBB("forCondition", fn);
+                builder->CreateBr(forConditionBlock);
+                auto forBody = createBB("forBody", fn);
+                auto forEnd = createBB("forEnd", fn);
+                auto forUpdateBlock = createBB("forUpdateBlock", fn);
+                builder->SetInsertPoint(forConditionBlock);
+                auto condition =
+                    genExpr(stmt->forStatement->continueCondition, forEnv);
+                builder->CreateCondBr(condition, forBody, forEnd);
+                builder->SetInsertPoint(forBody);
+                for (auto statement : stmt->forStatement->body->statements) {
+                    genStatement(statement, forEnv, oldFunc);
+                }
+                builder->CreateBr(forUpdateBlock);
+                builder->SetInsertPoint(forUpdateBlock);
+                genStatement(stmt->forStatement->updateCondition, forEnv,
+                             oldFunc);
+                builder->CreateBr(forConditionBlock);
+                builder->SetInsertPoint(forEnd);
+                break;
+            }
             case StatementType::Function: {
                 std::vector<llvm::Type*> paramTypes{};
-                for (auto arg : (*it)->funcStatement->arguments) {
+                for (auto arg : stmt->funcStatement->arguments) {
                     llvm::Type* type =
                         arg->type == TokenType::IntType
                             ? dynamic_cast<llvm::Type*>(builder->getInt32Ty())
@@ -145,28 +171,29 @@ class SchemeLLVM {
                 auto newFuncEnv = std::make_shared<Environment>(
                     std::map<std::string, llvm::Value*>(), globalEnv);
                 auto functionReturnType =
-                    (*it)->funcStatement->returnType == TokenType::IntType
+                    stmt->funcStatement->returnType == TokenType::IntType
                         ? dynamic_cast<llvm::Type*>(builder->getInt32Ty())
                         : builder->getInt8Ty()->getPointerTo();
                 auto newFunc =
-                    createFunction((*it)->funcStatement->name,
+                    createFunction(stmt->funcStatement->name,
                                    llvm::FunctionType::get(functionReturnType,
                                                            paramTypes, false),
                                    newFuncEnv);
                 fn = newFunc;
-                auto statements = (*it)->funcStatement->body->statements;
+                auto statements = stmt->funcStatement->body->statements;
                 int i = 0;  // INFO: fn->args() gives an iterator thus this
                             // shabby loop
                 for (auto& arg : fn->args()) {
-                    auto argFromAST = (*it)->funcStatement->arguments[i++];
-                    arg.setName(argFromAST->name);
-                    allocVar(argFromAST->name, arg.getType(), newFuncEnv, &arg);
+                    auto argFromAST = stmt->funcStatement->arguments[i++];
+                    arg.setName(*(argFromAST->name));
+                    allocVar(*(argFromAST->name), arg.getType(), newFuncEnv,
+                             &arg);
                 }
                 for (auto statementIt = statements.begin();
                      statementIt < statements.end(); statementIt++) {
-                    genStatement(statementIt, newFuncEnv, oldFunc);
+                    genStatement(*statementIt, newFuncEnv, oldFunc);
                 }
-                env->set((*it)->funcStatement->name, newFunc);
+                env->set(stmt->funcStatement->name, newFunc);
                 builder->SetInsertPoint(&oldFunc->getEntryBlock());
                 break;
             }
@@ -174,7 +201,7 @@ class SchemeLLVM {
                 assert(false && "Should'nt hit this");
             }
             case StatementType::Return: {
-                auto returnVal = (*it)->returnStatement->returnValue;
+                auto returnVal = stmt->returnStatement->returnValue;
                 auto returnExp = genExpr(returnVal, env);
                 builder->CreateRet(returnExp);
                 break;
@@ -197,20 +224,33 @@ class SchemeLLVM {
                 return num;
             }
             case ExpressionType::Infix: {
-                auto lhs = genExpr(expressionNode->infixExpr->lhs, env);
                 auto rhs = genExpr(expressionNode->infixExpr->rhs, env);
                 switch (expressionNode->infixExpr->op) {
                     case TokenType::Plus: {
-                        return builder->CreateAdd(lhs, rhs);
+                        auto lhs = genExpr(expressionNode->infixExpr->lhs, env);
+                        return builder->CreateAdd(lhs, rhs, "tmpAdd");
                     }
                     case TokenType::Minus: {
-                        return builder->CreateSub(lhs, rhs);
+                        auto lhs = genExpr(expressionNode->infixExpr->lhs, env);
+                        return builder->CreateSub(lhs, rhs, "tmpMinus");
                     }
                     case TokenType::LessThan: {
-                        return builder->CreateICmpULT(lhs, rhs);
+                        auto lhs = genExpr(expressionNode->infixExpr->lhs, env);
+                        return builder->CreateICmpULT(lhs, rhs, "tmpLessThan");
                     }
                     case TokenType::GreaterThan: {
-                        return builder->CreateICmpUGT(lhs, rhs);
+                        auto lhs = genExpr(expressionNode->infixExpr->lhs, env);
+                        return builder->CreateICmpUGT(lhs, rhs,
+                                                      "tmpGreaterThan");
+                    }
+                    case TokenType::Equal: {
+                        assert(expressionNode->infixExpr->lhs->type ==
+                                   ExpressionType::Identifier &&
+                               "Invalid lvalue");
+                        auto pointerToLhs =
+                            env->get(*(expressionNode->infixExpr->lhs
+                                           ->identifierExpression->name));
+                        return builder->CreateStore(rhs, pointerToLhs);
                     }
                     default: {
                         assert(false && "Invalid operand for infix");
@@ -220,17 +260,22 @@ class SchemeLLVM {
             }
             case ExpressionType::Identifier: {
                 auto identifier =
-                    env->get(expressionNode->identifierExpression->name);
-                return identifier;
+                    env->get(*(expressionNode->identifierExpression->name));
+                auto identifierCastForLoading =
+                    llvm::dyn_cast<llvm::AllocaInst>(identifier);
+                return builder->CreateLoad(
+                    identifierCastForLoading->getAllocatedType(),
+                    identifierCastForLoading,
+                    (expressionNode->identifierExpression->name)->c_str());
                 break;
             }
             case ExpressionType::Call: {
                 llvm::Function* function;
-                if (expressionNode->callExpression->fnName == "printf") {
+                if (*(expressionNode->callExpression->fnName) == "printf") {
                     function = module->getFunction("printf");
                 } else {
                     function = static_cast<llvm::Function*>(
-                        env->get(expressionNode->callExpression->fnName));
+                        env->get(*(expressionNode->callExpression->fnName)));
                 }
                 auto evaledExpressions = std::vector<llvm::Value*>();
                 for (auto arg : expressionNode->callExpression->arguments) {

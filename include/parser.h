@@ -19,7 +19,16 @@ enum class NodeType {
     Expression,
 };
 
-enum class StatementType { Let, Block, Return, Expression, Function, If };
+enum class StatementType {
+    Let,
+    Block,
+    Return,
+    Expression,
+    Function,
+    If,
+    For,
+    While
+};
 
 enum class Precedence {
     Lowest,
@@ -84,11 +93,11 @@ class IfStatement {
 class FunctionArg {
    public:
     TokenType type;
-    std::string name;
+    std::shared_ptr<std::string> name;
     std::shared_ptr<ExpressionNode> value;
     FunctionArg(TokenType type,
                 std::shared_ptr<ExpressionNode> value,
-                std::string name)
+                std::shared_ptr<std::string> name)
         : type(type), value(value), name(name) {}
 };
 
@@ -111,16 +120,16 @@ class FunctionStatement {
 
 class IdentifierExpression {
    public:
-    std::string name;
+    std::shared_ptr<std::string> name;
     IdentifierExpression() {}
-    IdentifierExpression(std::string name) : name(name) {}
+    IdentifierExpression(std::shared_ptr<std::string> name) : name(name) {}
 };
 
 class CallExpression {
    public:
-    std::string fnName;
+    std::shared_ptr<std::string> fnName;
     std::vector<std::shared_ptr<ExpressionNode>> arguments;
-    CallExpression(std::string fnName,
+    CallExpression(std::shared_ptr<std::string> fnName,
                    std::vector<std::shared_ptr<ExpressionNode>> arguments)
         : fnName(fnName), arguments(arguments) {}
 };
@@ -154,7 +163,7 @@ class ExpressionNode {
 
 class LetStatement {
    public:
-    std::string identifier;
+    std::shared_ptr<std::string> identifier;
     std::shared_ptr<ExpressionNode> value;
     LetStatement() {}
 };
@@ -180,6 +189,22 @@ class ExpressionStatement {
         : expression(expression) {}
 };
 
+class ForStatement {
+   public:
+    std::shared_ptr<StatementNode> initialCondition;
+    std::shared_ptr<ExpressionNode> continueCondition;
+    std::shared_ptr<StatementNode> updateCondition;
+    std::shared_ptr<BlockStatement> body;
+    ForStatement(std::shared_ptr<StatementNode> initialCondition,
+                 std::shared_ptr<ExpressionNode> continueCondition,
+                 std::shared_ptr<StatementNode> updateCondition,
+                 std::shared_ptr<BlockStatement> body)
+        : initialCondition(initialCondition),
+          continueCondition(continueCondition),
+          updateCondition(updateCondition),
+          body(body) {}
+};
+
 class StatementNode {
    public:
     StatementType type;
@@ -188,6 +213,7 @@ class StatementNode {
     std::shared_ptr<FunctionStatement> funcStatement;
     std::shared_ptr<ReturnStatement> returnStatement;
     std::shared_ptr<IfStatement> ifStatement;
+    std::shared_ptr<ForStatement> forStatement;
     StatementNode() {}
     StatementNode(std::shared_ptr<LetStatement> letStatement)
         : type(StatementType::Let), letStatement(letStatement) {}
@@ -201,6 +227,8 @@ class StatementNode {
     }
     StatementNode(std::shared_ptr<IfStatement> ifStatement)
         : ifStatement(ifStatement), type(StatementType::If) {}
+    StatementNode(std::shared_ptr<ForStatement> forStatement)
+        : forStatement(forStatement), type(StatementType::For) {}
 };
 
 class ProgramNode {
@@ -228,7 +256,8 @@ static std::map<TokenType, Precedence> precedenceMap = {
     {TokenType::Function, Precedence::Lowest},
     {TokenType::LParen, Precedence::Call},
     {TokenType::LessThan, Precedence::Lessgreater},
-    {TokenType::GreaterThan, Precedence::Lessgreater}};
+    {TokenType::GreaterThan, Precedence::Lessgreater},
+    {TokenType::Equal, Precedence::Equals}};
 
 class Parser {
    public:
@@ -266,8 +295,8 @@ class Parser {
             !((((*(tokenIt + 1)).get()->tokenType) == TokenType::Semicolon)) &&
             precedence < nextPrecedence) {
             std::vector<TokenType> hasInfix = {
-                TokenType::Plus, TokenType::Minus, TokenType::LParen,
-                TokenType::LessThan, TokenType::GreaterThan};
+                TokenType::Plus,     TokenType::Minus,       TokenType::LParen,
+                TokenType::LessThan, TokenType::GreaterThan, TokenType::Equal};
             if (std::find(hasInfix.begin(), hasInfix.end(),
                           (*tokenIt).get()->tokenType) != hasInfix.end()) {
                 lhs = parseInfix(precedence, lhs);
@@ -308,7 +337,8 @@ class Parser {
                 tokenIt++;
 
                 letStatement->value = value;
-                letStatement->identifier = identifierString;
+                letStatement->identifier =
+                    std::make_shared<std::string>(identifierString);
 
                 statement = std::make_shared<StatementNode>(letStatement);
                 break;
@@ -331,18 +361,42 @@ class Parser {
                 statement = parseIf();
                 break;
             }
+            case TokenType::For: {
+                statement = parseFor();
+                break;
+            }
             default: {
                 std::cout << "From statement " << (*tokenIt).get()->tokenType
                           << "\n";
                 auto expressionNode = parseExpression(Precedence::Lowest);
                 std::shared_ptr<ExpressionStatement> expressionStatement =
                     std::make_shared<ExpressionStatement>(expressionNode);
+                if ((*tokenIt)->tokenType == TokenType::Semicolon) {
+                    tokenIt++;  // TODO: refactor this hack
+                }
                 statement =
                     std::make_shared<StatementNode>(expressionStatement);
                 break;
             }
         }
         return statement;
+    }
+
+    std::shared_ptr<StatementNode> parseFor() {
+        tokenIt++;
+        assertToken(tokenIt, TokenType::LParen);
+        tokenIt++;
+        auto initialCondition = parseStatement();
+        auto continueCondition = parseExpression(Precedence::Lowest);
+        assertToken(tokenIt, TokenType::Semicolon);
+        tokenIt++;
+        auto updateCondition = parseStatement();
+        assertToken(tokenIt, TokenType::RParen);
+        tokenIt++;
+        auto body = parseBlockStatement();
+        auto forStatement = std::make_shared<ForStatement>(
+            initialCondition, continueCondition, updateCondition, body);
+        return std::make_shared<StatementNode>(forStatement);
     }
     std::shared_ptr<StatementNode> parseIf() {
         tokenIt++;
@@ -452,7 +506,7 @@ class Parser {
 
     std::shared_ptr<ExpressionNode> parseIdentifier(Precedence precedence) {
         auto identifierExpression = std::make_shared<IdentifierExpression>(
-            (*tokenIt).get()->identifierValue);
+            std::make_shared<std::string>((*tokenIt).get()->identifierValue));
         tokenIt++;
         auto expressionNode =
             std::make_shared<ExpressionNode>(identifierExpression);
@@ -490,7 +544,8 @@ class Parser {
             case TokenType::Plus:
             case TokenType::Minus:
             case TokenType::LessThan:
-            case TokenType::GreaterThan: {
+            case TokenType::GreaterThan:
+            case TokenType::Equal: {
                 std::cout << "Parsing infix plus/minus"
                           << "\n";
                 auto currentOp = (*tokenIt).get()->tokenType;
