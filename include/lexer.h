@@ -96,6 +96,16 @@ class Lexer {
                 it++;
                 std::string stringValue;
                 while (*it != '"') {
+                    if (*it == '\\') {
+                        it++;
+                        if (*it == 'n') {
+                            stringValue += "\n";
+                            it++;
+                            continue;
+                        } else {
+                            stringValue += "\\";
+                        }
+                    }
                     stringValue += *it;
                     it++;
                 }

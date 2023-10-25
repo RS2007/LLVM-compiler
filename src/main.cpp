@@ -253,8 +253,11 @@ int main(int argc, char* argv[]) {
       defun add(a: int, b: int): int{
            return a + b;
       }
-      for(let i = 0;i < 10;i = i+1){
-          printf("%d\n",add(i,1));
+      for(let i = 0;i < 10;i = add(i,1)){
+        for(let j = 0;j < i; j = j+1){
+          printf("*");
+        }
+        printf("\n");
       }
     )";
     testParseFor();

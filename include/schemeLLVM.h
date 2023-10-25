@@ -69,10 +69,20 @@ class SchemeLLVM {
              llvm::Function* oldFunc) {
         auto statements = programNode.get()->statements;
         for (auto it = statements.begin(); it < statements.end(); it++) {
-            genStatement(*it, env, oldFunc);
+            genStatement(*it, env, oldFunc, &fn->getEntryBlock());
             fn = oldFunc;  // in case statement is a function, you need to
                            // return the insert point to the older function
         }
+    }
+    void allocVarInBlock(std::string name,
+                         llvm::Type* type,
+                         Env_t env,
+                         llvm::Value* exprValue,
+                         llvm::BasicBlock* block) {
+        varsBuilder->SetInsertPoint(block);
+        auto varAlloc = varsBuilder->CreateAlloca(type, 0, name.c_str());
+        builder->CreateStore(exprValue, varAlloc);
+        env->set(name, varAlloc);
     }
     void allocVar(std::string name,
                   llvm::Type* type,
@@ -86,13 +96,14 @@ class SchemeLLVM {
 
     void genStatement(std::shared_ptr<StatementNode> stmt,
                       Env_t env,
-                      llvm::Function* oldFunc) {
+                      llvm::Function* oldFunc,
+                      llvm::BasicBlock* block) {
         switch (stmt->type) {
             case StatementType::Let: {
                 auto letStatement = stmt->letStatement;
                 auto exprValue = genExpr(letStatement->value, env);
-                allocVar(*(letStatement->identifier), exprValue->getType(), env,
-                         exprValue);
+                allocVarInBlock(*(letStatement->identifier),
+                                exprValue->getType(), env, exprValue, block);
                 // llvm::Value* value = genExpr(letStatement->value);
                 // module->getOrInsertGlobal(letStatement->identifier,
                 //                           value->getType());
@@ -119,7 +130,7 @@ class SchemeLLVM {
                 auto trueBlock = stmt->ifStatement->trueBlock;
                 for (auto statementIt = trueBlock->statements.begin();
                      statementIt < trueBlock->statements.end(); statementIt++) {
-                    genStatement(*statementIt, env, oldFunc);
+                    genStatement(*statementIt, env, oldFunc, block);
                 }
                 builder->CreateBr(ifEndBlock);
                 builder->SetInsertPoint(ifFalseBlock);
@@ -127,7 +138,7 @@ class SchemeLLVM {
                 for (auto statementIt = falseBlock->statements.begin();
                      statementIt < falseBlock->statements.end();
                      statementIt++) {
-                    genStatement(*statementIt, env, oldFunc);
+                    genStatement(*statementIt, env, oldFunc, block);
                 }
                 builder->CreateBr(ifEndBlock);
                 builder->SetInsertPoint(ifEndBlock);
@@ -137,7 +148,7 @@ class SchemeLLVM {
                 auto forEnv = std::make_shared<Environment>(
                     std::map<std::string, llvm::Value*>(), env);
                 genStatement(stmt->forStatement->initialCondition, forEnv,
-                             oldFunc);
+                             oldFunc, block);
                 auto forConditionBlock = createBB("forCondition", fn);
                 builder->CreateBr(forConditionBlock);
                 auto forBody = createBB("forBody", fn);
@@ -149,12 +160,12 @@ class SchemeLLVM {
                 builder->CreateCondBr(condition, forBody, forEnd);
                 builder->SetInsertPoint(forBody);
                 for (auto statement : stmt->forStatement->body->statements) {
-                    genStatement(statement, forEnv, oldFunc);
+                    genStatement(statement, forEnv, oldFunc, forBody);
                 }
                 builder->CreateBr(forUpdateBlock);
                 builder->SetInsertPoint(forUpdateBlock);
                 genStatement(stmt->forStatement->updateCondition, forEnv,
-                             oldFunc);
+                             oldFunc, block);
                 builder->CreateBr(forConditionBlock);
                 builder->SetInsertPoint(forEnd);
                 break;
@@ -191,7 +202,8 @@ class SchemeLLVM {
                 }
                 for (auto statementIt = statements.begin();
                      statementIt < statements.end(); statementIt++) {
-                    genStatement(*statementIt, newFuncEnv, oldFunc);
+                    genStatement(*statementIt, newFuncEnv, oldFunc,
+                                 &newFunc->getEntryBlock());
                 }
                 env->set(stmt->funcStatement->name, newFunc);
                 builder->SetInsertPoint(&oldFunc->getEntryBlock());
