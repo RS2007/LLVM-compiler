@@ -6,6 +6,7 @@
 
 #define assertToken(tokenIt, type) assert((*tokenIt).get()->tokenType == type)
 #define inMapAssert(map, key) assert(map.find(key) != map.end());
+#define todo() assert(false && "Unimplemented")
 
 // Forward declarations in no particular order
 class BlockStatement;
@@ -205,6 +206,17 @@ class ForStatement {
           body(body) {}
 };
 
+class WhileStatement {
+   public:
+    std::shared_ptr<ExpressionNode> condition;
+    std::shared_ptr<BlockStatement> body;
+    WhileStatement(
+
+        std::shared_ptr<ExpressionNode> condition,
+        std::shared_ptr<BlockStatement> body)
+        : condition(condition), body(body) {}
+};
+
 class StatementNode {
    public:
     StatementType type;
@@ -214,6 +226,7 @@ class StatementNode {
     std::shared_ptr<ReturnStatement> returnStatement;
     std::shared_ptr<IfStatement> ifStatement;
     std::shared_ptr<ForStatement> forStatement;
+    std::shared_ptr<WhileStatement> whileStatement;
     StatementNode() {}
     StatementNode(std::shared_ptr<LetStatement> letStatement)
         : type(StatementType::Let), letStatement(letStatement) {}
@@ -229,6 +242,8 @@ class StatementNode {
         : ifStatement(ifStatement), type(StatementType::If) {}
     StatementNode(std::shared_ptr<ForStatement> forStatement)
         : forStatement(forStatement), type(StatementType::For) {}
+    StatementNode(std::shared_ptr<WhileStatement> whileStatement)
+        : whileStatement(whileStatement), type(StatementType::While) {}
 };
 
 class ProgramNode {
@@ -365,6 +380,10 @@ class Parser {
                 statement = parseFor();
                 break;
             }
+            case TokenType::While: {
+                statement = parseWhile();
+                break;
+            }
             default: {
                 std::cout << "From statement " << (*tokenIt).get()->tokenType
                           << "\n";
@@ -413,6 +432,18 @@ class Parser {
             std::make_shared<IfStatement>(condition, trueBody, falseBody);
         auto statement = std::make_shared<StatementNode>(ifStatement);
         return statement;
+    }
+
+    std::shared_ptr<StatementNode> parseWhile() {
+        tokenIt++;
+        assertToken(tokenIt, TokenType::LParen);
+        tokenIt++;
+        auto condition = parseExpression(Precedence::Lowest);
+        assertToken(tokenIt, TokenType::RParen);
+        tokenIt++;
+        auto body = parseBlockStatement();
+        auto whileNode = std::make_shared<WhileStatement>(condition, body);
+        return std::make_shared<StatementNode>(whileNode);
     }
 
     std::shared_ptr<ExpressionNode> parsePrefix(Precedence precedence) {

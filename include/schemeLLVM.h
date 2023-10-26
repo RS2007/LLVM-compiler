@@ -170,6 +170,26 @@ class SchemeLLVM {
                 builder->SetInsertPoint(forEnd);
                 break;
             }
+            case StatementType::While: {
+                auto whileEnv = std::make_shared<Environment>(
+                    std::map<std::string, llvm::Value*>(), env);
+                auto whileConditionBlock = createBB("whileCondition", fn);
+                builder->CreateBr(whileConditionBlock);
+                builder->SetInsertPoint(whileConditionBlock);
+                auto condition =
+                    genExpr(stmt->whileStatement->condition, whileEnv);
+                auto whileBody = createBB("whileBody", fn);
+                auto whileEnd = createBB("whileEnd", fn);
+                builder->CreateCondBr(condition, whileBody, whileEnd);
+                builder->SetInsertPoint(whileBody);
+                for (auto statement : stmt->whileStatement->body->statements) {
+                    genStatement(statement, whileEnv, oldFunc, whileBody);
+                }
+                builder->CreateBr(whileConditionBlock);
+                ;
+                builder->SetInsertPoint(whileEnd);
+                break;
+            }
             case StatementType::Function: {
                 std::vector<llvm::Type*> paramTypes{};
                 for (auto arg : stmt->funcStatement->arguments) {

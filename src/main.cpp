@@ -248,19 +248,72 @@ void testParseFor() {
            "Expected equal in infix for update condition");
 }
 
-int main(int argc, char* argv[]) {
+void testNestedLoops() {
     std::string program = R"(
       defun add(a: int, b: int): int{
            return a + b;
       }
       for(let i = 0;i < 10;i = add(i,1)){
-        for(let j = 0;j < i; j = j+1){
+        for(let j = 0;j < i+1; j = j+1){
           printf("*");
         }
         printf("\n");
       }
     )";
     testParseFor();
+    SchemeLLVM vm;
+    vm.exec(program);
+}
+
+void testParseWhile() {
+    std::string program = R"(
+      defun add(a: int, b: int): int{
+           return a + b;
+      }
+      let i = 0;
+      while(i < 10){
+        printf("%d\n",i);
+        i = i+1;
+      }
+    )";
+    auto lexer = std::make_unique<Lexer>();
+    auto tokens = lexer->lex(program);
+    auto parser = std::make_unique<Parser>(tokens);
+    auto programNode = parser->parse();
+    auto statements = programNode->statements;
+    assert(statements[2]->type == StatementType::While && "Expected while");
+    assert(statements[2]->whileStatement->condition->infixExpr->op ==
+               TokenType::LessThan &&
+           "Expected less than");
+    assert(*(statements[2]
+                 ->whileStatement->condition->infixExpr->lhs
+                 ->identifierExpression->name) == "i" &&
+           "Expected i");
+    assert((statements[2]
+                ->whileStatement->condition->infixExpr->rhs->integerExp
+                ->intValue) == 10 &&
+           "Expected 10");
+    assert(statements[2]->whileStatement->body->statements.size() == 2 &&
+           "Expected 2 statements in body");
+}
+
+int main(int argc, char* argv[]) {
+    std::string program = R"(
+      defun add(a: int, b: int): int{
+           return a + b;
+      }
+      let i = 1;
+      while(i < 10){
+        let j = 0;
+        while(j < i){
+          printf("*");
+          j = j+1;
+        }
+        printf("\n");
+        i = i+1;
+      }
+    )";
+
     SchemeLLVM vm;
     vm.exec(program);
     return 0;
