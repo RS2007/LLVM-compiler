@@ -1,2 +1,2 @@
-BasedOnStyle: Chromium
+BasedOnStyle: Clang
 IndentWidth: 4

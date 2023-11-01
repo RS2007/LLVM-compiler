@@ -1,4 +1,4 @@
-- [ ] Finish the environment API
+- [x] Finish the environment API
 - [x] Remove as many news and deletes and use smart pointers
 - [o] Add support for comparison operators  
   - Support for `>=`,`<=`,`==`,`!`
@@ -9,10 +9,19 @@
   - [x] Function
   - [x] If
   - [x] Call
-  - [ ] For
-  - [ ] While
-- [ ] Add support for classes and inheritance
+  - [x] For
+  - [x] While
+- [o] Add support for classes and inheritance
+  - [x] Classes(stack allocated) and property access working
+  - [ ] Heap allocation
+  - [ ] Member calls
 - [ ] Higher order function support
+- [ ] Implementing a type checker
+- [x] Map access error: fix this
+- [o] Test codegen for member functions
+  - [x] Constructor working
+- [ ] Class Methods & V tables
+- [x] Based on the js parser, we will have an assignment expression and a member expression
 
 ## Language Spec
 ```
@@ -33,3 +42,23 @@ defun add(x: number,y: number): number -> {
   - generate a forCondition basic block and put the condition branch there
   - go to forBody basic block if the condition is satisfied(conditional branch)
   - at the end of the body, update the condition and then jump back to the forCondition basic block
+
+### Classes
+```ll
+  %Point = type {
+    i32,
+    i32
+  } ; aggregate types
+
+  define void @Point_constructor(%Point* %self,i32 %x,i32 %y){
+
+  }
+```
+- `getelementptr` or `gep` instruction
+  - `address = getelementptr <ty>,<ty>* <base>,<idx1>,<idx2>`
+  - The first ty is the type of the object we are reading
+  - The second ty* is the pointer to the base object
+
+
+### The weird parser error
+- why can the lhs of the expression be the member expression 
