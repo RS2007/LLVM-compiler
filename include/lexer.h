@@ -83,11 +83,8 @@ public:
 class Lexer {
 public:
   std::vector<std::shared_ptr<Token>> lex(std::string input) {
-    std::cout << "input: " << input << "\n";
     std::vector<std::shared_ptr<Token>> tokens;
     std::string::iterator it = input.begin();
-    std::cout << "The problem is with: " << input[168] << " " << input[169]
-              << " " << input[170] << "\n";
     while (it < input.end()) {
       if (std::isspace(*it)) {
         it++;

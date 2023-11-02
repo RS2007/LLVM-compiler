@@ -343,7 +343,6 @@ void testParseClass() {
       (statements[2]->letStatement->value->newExpression->arguments.size()) ==
           2 &&
       "Expected  2 arguments");
-  std::cout << "Parsing succesful\n";
 }
 
 int main(int argc, char *argv[]) {

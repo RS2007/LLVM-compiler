@@ -351,9 +351,7 @@ public:
 
   std::shared_ptr<ProgramNode> parse() {
     auto programNode = std::make_shared<ProgramNode>();
-    std::cout << "Parsing program\n";
     for (tokenIt = tokens.begin(); tokenIt < tokens.end();) {
-      std::cout << "Parsing statement\n";
       auto statement = parseStatement();
       programNode->statements.emplace_back(statement);
     }
@@ -401,13 +399,10 @@ private:
       auto letStatement = std::make_shared<LetStatement>();
       tokenIt = tokenIt + 1; // move to the identifier
       assertToken(tokenIt, TokenType::Identifier);
-      std::cout << "Token should be identifier: "
-                << (*tokenIt).get()->tokenType;
       std::string identifierString = (*tokenIt).get()->identifierValue;
 
       tokenIt = tokenIt + 1; // move to equal
       assertToken(tokenIt, TokenType::Equal);
-      std::cout << "Token should be equal: " << (*tokenIt).get()->tokenType;
       tokenIt = tokenIt + 1; // move to value expression
 
       auto value = parseExpression(Precedence::Lowest);
@@ -452,7 +447,6 @@ private:
       break;
     }
     default: {
-      std::cout << "From statement " << (*tokenIt).get()->tokenType << "\n";
       auto expressionNode = parseExpression(Precedence::Lowest);
       std::shared_ptr<ExpressionStatement> expressionStatement =
           std::make_shared<ExpressionStatement>(expressionNode);
@@ -570,7 +564,6 @@ private:
       return parseNewExpression(precedence);
     }
     default:
-      std::cout << (*tokenIt).get()->tokenType << "\n";
       assert(false && "Should'nt hit here");
     }
   }
@@ -581,8 +574,6 @@ private:
     assertToken(tokenIt, TokenType::Dot);
     tokenIt++;
     auto rhs = parseIdentifier(Precedence::Index);
-    std::cout << rhs->type << "\n";
-    std::cout << (*tokenIt)->tokenType << "\n";
     auto memberExpression = std::make_shared<MemberExpression>(left, rhs);
     return std::make_shared<ExpressionNode>(memberExpression);
   }
@@ -722,8 +713,6 @@ private:
     case TokenType::Minus:
     case TokenType::LessThan:
     case TokenType::GreaterThan: {
-      std::cout << "Parsing infix plus/minus"
-                << "\n";
       auto currentOp = (*tokenIt).get()->tokenType;
       tokenIt++;
       inMapAssert(precedenceMap, currentOp);

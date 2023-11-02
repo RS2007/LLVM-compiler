@@ -29,7 +29,6 @@ public:
   }
 
   void exec(const std::string &program) {
-    module->print(llvm::outs(), nullptr);
     auto lexer = std::make_unique<Lexer>();
     auto tokens = lexer->lex(program);
     auto parser = std::make_unique<Parser>(tokens);
@@ -211,12 +210,6 @@ private:
         llvm::Type *type = getLLVMTypeFromLangType(arg->type);
         paramTypes.emplace_back(type);
       }
-      std::cout << "Printing param types"
-                << "\n";
-      for (auto param : paramTypes) {
-        param->print(llvm::outs());
-      }
-      std::cout << "End printing param types";
 
       auto newFuncEnv = std::make_shared<Environment>(
           std::map<std::string, llvm::AllocaInst *>(), env);
@@ -331,7 +324,6 @@ private:
 
   std::string getClassFromMethodPrefix() {
     std::string fnName = builder->GetInsertBlock()->getName().str();
-    std::cout << "Fn name is " << fnName << "\n";
     size_t underscorePos = fnName.find('_');
     if (underscorePos != std::string::npos) {
       return fnName.substr(0, underscorePos);
@@ -428,8 +420,6 @@ private:
 
       } else if (expressionNode->assignmentExpression->lhs->type ==
                  ExpressionType::Member) {
-        genExpr(expressionNode->assignmentExpression->lhs, env)
-            ->print(llvm::outs());
         auto className =
             (llvm::dyn_cast<llvm::GetElementPtrInst>(
                  (llvm::dyn_cast<llvm::LoadInst>(
@@ -439,15 +429,10 @@ private:
                 ->getStructName()
                 .str();
         auto classEnv = classTable.find(className)->second->classEnv;
-        std::cout << "LoadInst: "
-                  << "\n";
         pointerToLhs = classEnv->get(
             *(expressionNode->assignmentExpression->lhs->memberExpression->rhs
                   ->identifierExpression->name));
         assert(pointerToLhs != nullptr && "Variable not an attribute of class");
-        llvm::outs() << "pointerToLhs\n";
-        pointerToLhs->print(llvm::outs());
-        llvm::outs() << "\n";
       }
       return builder->CreateStore(rhs, pointerToLhs);
     }
@@ -470,14 +455,8 @@ private:
     }
     case ExpressionType::Identifier: {
       auto identifier = env->get(*(expressionNode->identifierExpression->name));
-      std::cout << "Identifier\n";
-      identifier->print(llvm::outs());
-      llvm::outs() << "\n";
       auto identifierCastForLoading =
           llvm::dyn_cast<llvm::AllocaInst>(identifier);
-      std::cout << "IdentifierCastForLoading\n";
-      identifierCastForLoading->print(llvm::outs());
-      llvm::outs() << "\n";
       if (llvm::GetElementPtrInst *gepInst =
               llvm::dyn_cast<llvm::GetElementPtrInst>(identifier)) {
         // REFACTOR: HACK for getting gep arguments in environment working
@@ -499,9 +478,6 @@ private:
       auto evaledExpressions = std::vector<llvm::Value *>();
       for (auto arg : expressionNode->callExpression->arguments) {
         auto evaledArg = genExpr(arg, env);
-        llvm::outs() << "Args: ";
-        evaledArg->print(llvm::outs());
-        llvm::outs() << "\n";
         evaledExpressions.emplace_back(evaledArg);
       }
       auto call =
