@@ -1,3 +1,5 @@
+#pragma once
+
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Value.h"
 #include <iostream>
@@ -14,7 +16,7 @@ public:
     return value;
   }
 
-  llvm::Value *get(const std::string &name) {
+  llvm::AllocaInst *get(const std::string &name) {
     auto valueInMap = inner.find(name);
     if (valueInMap == inner.end()) {
       // Value not found in inner scope, search in outer scope

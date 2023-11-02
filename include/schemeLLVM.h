@@ -218,7 +218,7 @@ private:
       std::cout << "End printing param types";
 
       auto newFuncEnv = std::make_shared<Environment>(
-          std::map<std::string, llvm::AllocaInst *>(), globalEnv);
+          std::map<std::string, llvm::AllocaInst *>(), env);
       auto functionReturnType =
           getLLVMTypeFromLangType(stmt->funcStatement->returnType);
       auto newFunc = createFunction(
@@ -280,7 +280,8 @@ private:
 
       std::vector<llvm::Type *> classAttributeTypes;
 
-      classTable[className] = std::make_shared<ClassInfo>(classGenerated);
+      classTable[className] =
+          std::make_shared<ClassInfo>(classGenerated, classEnv);
 
       for (auto attribute : classStatement->attributes) {
         (*(classTable[className]->attributes))[*(attribute->name)] =
@@ -369,11 +370,8 @@ private:
       assert(expressionNode->memberExpression->lhs->type ==
              ExpressionType::Identifier);
       llvm::Value *lhs = genExpr(expressionNode->memberExpression->lhs, env);
-      lhs->print(llvm::outs());
-      llvm::outs() << "\n";
       ExpressionType rhsType = expressionNode->memberExpression->rhs->type;
 
-      std::cout << "Expression type of rhs is " << rhsType << "\n";
       assert(rhsType == ExpressionType::Identifier &&
              "Should be an identifier on the rhs of a member expression");
       std::string fieldName =
@@ -384,17 +382,20 @@ private:
         // assert(classInfo->attributes != nullptr && "Should not be null");
         llvm::StructType *structInstance =
             (llvm::StructType *)(lhs->getType()->getContainedType(0));
-        structInstance->print(llvm::outs());
-        llvm::outs() << "\n";
         auto indexOfField = getFieldIndex(structInstance, fieldName);
-        std::cout << "Index of field: " << indexOfField << "\n";
-        module->print(llvm::outs(), nullptr);
         auto address = builder->CreateStructGEP(structInstance, lhs,
                                                 indexOfField, "p" + fieldName);
+        auto classInformation = classTable[*(
+            expressionNode->memberExpression->lhs->identifierExpression->name)];
+        auto load = builder->CreateLoad(
+            structInstance->getElementType(indexOfField), address, fieldName);
+        llvm::outs() << "Address \n";
+        address->print(llvm::outs());
+        llvm::outs() << "\n";
+        ((llvm::AllocaInst *)address)->print(llvm::outs());
+        llvm::outs() << "\n";
         env->set(fieldName, (llvm::AllocaInst *)address);
-        return builder->CreateLoad(structInstance->getElementType(indexOfField),
-                                   address, fieldName);
-
+        return load;
       } else {
         assert(false && "Please don't do this, please");
       }
@@ -404,7 +405,7 @@ private:
       assert(lhsType == ExpressionType::Identifier ||
              lhsType == ExpressionType::Member && "Invalid lvalue");
       auto rhs = genExpr(expressionNode->assignmentExpression->rhs, env);
-      llvm::Value *pointerToLhs;
+      llvm::AllocaInst *pointerToLhs;
       if (expressionNode->assignmentExpression->lhs->type ==
           ExpressionType::Identifier) {
         genExpr(expressionNode->assignmentExpression->lhs, env);
@@ -417,6 +418,9 @@ private:
         pointerToLhs = env->get(
             *(expressionNode->assignmentExpression->lhs->memberExpression->rhs
                   ->identifierExpression->name));
+        llvm::outs() << "The root cause of all evil ";
+        pointerToLhs->print(llvm::outs());
+        llvm::outs() << "\n";
       }
       return builder->CreateStore(rhs, pointerToLhs);
     }
@@ -439,8 +443,22 @@ private:
     }
     case ExpressionType::Identifier: {
       auto identifier = env->get(*(expressionNode->identifierExpression->name));
+      std::cout << "Identifier\n";
+      identifier->print(llvm::outs());
+      llvm::outs() << "\n";
       auto identifierCastForLoading =
           llvm::dyn_cast<llvm::AllocaInst>(identifier);
+      std::cout << "IdentifierCastForLoading\n";
+      identifierCastForLoading->print(llvm::outs());
+      llvm::outs() << "\n";
+      if (llvm::GetElementPtrInst *gepInst =
+              llvm::dyn_cast<llvm::GetElementPtrInst>(identifier)) {
+        // REFACTOR: HACK for getting gep arguments in environment working
+        return builder->CreateLoad(
+            gepInst->getType()->getPointerElementType(),
+            identifierCastForLoading,
+            (expressionNode->identifierExpression->name)->c_str());
+      }
       return builder->CreateLoad(
           identifierCastForLoading->getAllocatedType(),
           identifierCastForLoading,
@@ -453,7 +471,11 @@ private:
           (module->getFunction(*(expressionNode->callExpression->fnName)));
       auto evaledExpressions = std::vector<llvm::Value *>();
       for (auto arg : expressionNode->callExpression->arguments) {
-        evaledExpressions.emplace_back(genExpr(arg, env));
+        auto evaledArg = genExpr(arg, env);
+        llvm::outs() << "Args: ";
+        evaledArg->print(llvm::outs());
+        llvm::outs() << "\n";
+        evaledExpressions.emplace_back(evaledArg);
       }
       auto call =
           builder->CreateCall((llvm::Function *)(function), evaledExpressions);

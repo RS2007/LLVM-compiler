@@ -356,7 +356,8 @@ int main(int argc, char *argv[]) {
         y: int;
         defun constructor(x: int,y: int): class {
           this.x = x;
-          this.y = y;
+          this.y = add(x,y);
+          printf("y is %d\n",y);
         }
       }
       let helloinst = new Hello(3,4);
