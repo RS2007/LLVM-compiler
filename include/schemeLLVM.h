@@ -442,7 +442,11 @@ private:
       if (classInfo == nullptr) {
         assert(false && "Class is undefined");
       }
-      auto instance = builder->CreateAlloca(classInfo->classGenerated);
+      auto typeSize = builder->getInt64(getTypeSize(classInfo->classGenerated));
+      auto mallocPtr = builder->CreateCall(module->getFunction("GC_malloc"),
+                                           typeSize, className);
+      auto instance = builder->CreatePointerCast(
+          mallocPtr, classInfo->classGenerated->getPointerTo());
       // get the constructor function
       auto constructor = module->getFunction(className + "_constructor");
       std::vector<llvm::Value *> evaluatedArguments;
@@ -490,6 +494,10 @@ private:
     return dummy;
   }
 
+  size_t getTypeSize(llvm::Type *type) {
+    return module->getDataLayout().getTypeAllocSize(type);
+  }
+
   int getFieldIndex(llvm::StructType *structInstance, std::string fieldName) {
     auto attributes = *classTable[structInstance->getName().data()]->attributes;
     auto attribute = attributes.find(fieldName);
@@ -532,6 +540,10 @@ private:
     module->getOrInsertFunction(
         "printf", llvm::FunctionType::get(builder->getInt32Ty(), bytePtrArr,
                                           true /*vararg*/));
+    module->getOrInsertFunction(
+        "GC_malloc",
+        llvm::FunctionType::get(builder->getInt8Ty()->getPointerTo(),
+                                builder->getInt64Ty(), false));
   }
 
   void setupGlobalEnvironment() {
