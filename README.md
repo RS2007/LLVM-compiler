@@ -9,3 +9,8 @@
   ```
 ### Note
 - Currently supports type signatures with no typechecking(will be implemented in the future)
+
+### Demo
+
+https://github.com/RS2007/llvm-cpp-tut/assets/83483297/e362faaf-9bb3-4fb1-ad60-03ba5fa0d53a
+
