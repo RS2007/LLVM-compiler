@@ -28,8 +28,6 @@ public:
     }
     return valueInMap->second;
   }
-
-private:
   std::map<std::string, llvm::AllocaInst *> inner;
   std::shared_ptr<Environment> outer;
 };

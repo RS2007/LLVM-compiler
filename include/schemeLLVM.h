@@ -8,6 +8,7 @@
 #include "llvm-13/llvm/IR/Module.h"
 #include "llvm-13/llvm/IR/Verifier.h"
 #include "parser.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/Alignment.h"
 #include <algorithm>
 #include <iterator>
@@ -328,6 +329,17 @@ private:
     }
   }
 
+  std::string getClassFromMethodPrefix() {
+    std::string fnName = builder->GetInsertBlock()->getName().str();
+    std::cout << "Fn name is " << fnName << "\n";
+    size_t underscorePos = fnName.find('_');
+    if (underscorePos != std::string::npos) {
+      return fnName.substr(0, underscorePos);
+    } else {
+      return fnName;
+    }
+  }
+
   llvm::Value *genExpr(std::shared_ptr<ExpressionNode> expressionNode,
                        Env_t env) {
     llvm::Value *dummy;
@@ -370,6 +382,11 @@ private:
       assert(expressionNode->memberExpression->lhs->type ==
              ExpressionType::Identifier);
       llvm::Value *lhs = genExpr(expressionNode->memberExpression->lhs, env);
+      auto loadInst = llvm::dyn_cast<llvm::LoadInst>(lhs);
+      auto className = (llvm::dyn_cast<llvm::PointerType>(loadInst->getType()))
+                           ->getElementType()
+                           ->getStructName()
+                           .str();
       ExpressionType rhsType = expressionNode->memberExpression->rhs->type;
 
       assert(rhsType == ExpressionType::Identifier &&
@@ -385,16 +402,13 @@ private:
         auto indexOfField = getFieldIndex(structInstance, fieldName);
         auto address = builder->CreateStructGEP(structInstance, lhs,
                                                 indexOfField, "p" + fieldName);
-        auto classInformation = classTable[*(
-            expressionNode->memberExpression->lhs->identifierExpression->name)];
+
+        std::shared_ptr<ClassInfo> classInformation;
+        assert(classTable.find(className) != classTable.end());
+        classInformation = (classTable.find(className)->second);
         auto load = builder->CreateLoad(
             structInstance->getElementType(indexOfField), address, fieldName);
-        llvm::outs() << "Address \n";
-        address->print(llvm::outs());
-        llvm::outs() << "\n";
-        ((llvm::AllocaInst *)address)->print(llvm::outs());
-        llvm::outs() << "\n";
-        env->set(fieldName, (llvm::AllocaInst *)address);
+        classInformation->classEnv->set(fieldName, (llvm::AllocaInst *)address);
         return load;
       } else {
         assert(false && "Please don't do this, please");
@@ -414,11 +428,24 @@ private:
 
       } else if (expressionNode->assignmentExpression->lhs->type ==
                  ExpressionType::Member) {
-        genExpr(expressionNode->assignmentExpression->lhs, env);
-        pointerToLhs = env->get(
+        genExpr(expressionNode->assignmentExpression->lhs, env)
+            ->print(llvm::outs());
+        auto className =
+            (llvm::dyn_cast<llvm::GetElementPtrInst>(
+                 (llvm::dyn_cast<llvm::LoadInst>(
+                      genExpr(expressionNode->assignmentExpression->lhs, env))
+                      ->getPointerOperand())))
+                ->getSourceElementType()
+                ->getStructName()
+                .str();
+        auto classEnv = classTable.find(className)->second->classEnv;
+        std::cout << "LoadInst: "
+                  << "\n";
+        pointerToLhs = classEnv->get(
             *(expressionNode->assignmentExpression->lhs->memberExpression->rhs
                   ->identifierExpression->name));
-        llvm::outs() << "The root cause of all evil ";
+        assert(pointerToLhs != nullptr && "Variable not an attribute of class");
+        llvm::outs() << "pointerToLhs\n";
         pointerToLhs->print(llvm::outs());
         llvm::outs() << "\n";
       }
