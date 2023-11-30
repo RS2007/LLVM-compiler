@@ -2,75 +2,6 @@
 #include "parser.h"
 #include "schemeLLVM.h"
 
-void prettyPrintTokenArray(std::vector<Token *> tokens) {
-  for (auto it = tokens.begin(); it < tokens.end(); it++) {
-    switch ((*it)->tokenType) {
-    case TokenType::Let: {
-      std::cout << "Let"
-                << "\n";
-      break;
-    }
-    case TokenType::LParen: {
-      std::cout << "LParen"
-                << "\n";
-      break;
-    }
-    case TokenType::RParen: {
-      std::cout << "RParen"
-                << "\n";
-      break;
-    }
-    case TokenType::Identifier: {
-      std::cout << "Identifier: " << (*it)->identifierValue << "\n";
-      break;
-    }
-    case TokenType::String: {
-      std::cout << "String: " << (*it)->stringValue << "\n";
-      break;
-    }
-    case TokenType::Number: {
-      std::cout << "Number: " << (*it)->numValue << "\n";
-      break;
-    }
-    case TokenType::LSquare: {
-      std::cout << "["
-                << "\n";
-      break;
-    }
-    case TokenType::RSquare: {
-      std::cout << "]"
-                << "\n";
-      break;
-    }
-    case TokenType::Semicolon: {
-      std::cout << ";"
-                << "\n";
-      break;
-    }
-    case TokenType::Plus: {
-      std::cout << "+"
-                << "\n";
-      break;
-    }
-    case TokenType::Minus: {
-      std::cout << "-"
-                << "\n";
-      break;
-    }
-    case TokenType::Equal: {
-      std::cout << "="
-                << "\n";
-      break;
-    }
-    case TokenType::Comma: {
-      std::cout << ","
-                << "\n";
-      break;
-    }
-    }
-  }
-}
-
 void testParseLetStatement() {
   std::string program = R"(
       let hello = 3 - 2;
@@ -345,25 +276,58 @@ void testParseClass() {
       "Expected  2 arguments");
 }
 
-int main(int argc, char *argv[]) {
+void testFibWithClasses() {
+  // INFO: not technically a test, but a good example to test the functionality
+  // of the compiler
   std::string program = R"(
-      defun add(a: int, b: int): int{
-           return a + b;
+      defun fib(a: int): int {
+        if(a < 2){
+          return 1;
+        } else {
+          return fib(a-1)+fib(a-2);
+        }
+        return fib(a-1)+fib(a-2);
       }
       class Hello{
         x: int;
-        y: int;
-        defun constructor(x: int,y: int): class {
-          this.x = x;
-          this.y = add(x,y);
-          printf("y is %d\n",y);
+        y: string;
+        defun constructor(x: int,y: string): class {
+          this.x = fib(x);
+          this.y = y;
+          printf("y is %s\n",y);
         }
       }
-      let helloinst = new Hello(3,4);
+      let helloinst = new Hello(4,"Hello World!");
       printf("x of helloinst is %d\n",helloinst.x);
-      printf("y of helloinst is %d\n",helloinst.y);
+      printf("y of helloinst is %s\n",helloinst.y);
     )";
-  testParseClass();
+  SchemeLLVM vm;
+  vm.exec(program);
+}
+
+int main(int argc, char *argv[]) {
+  std::string program = R"(
+      defun fib(a: int): int {
+        if(a < 2){
+          return 1;
+        } else {
+          return fib(a-1)+fib(a-2);
+        }
+        return fib(a-1)+fib(a-2);
+      }
+      class Hello{
+        x: int;
+        y: string;
+        defun constructor(x: int,y: string): class {
+          this.x = fib(x);
+          this.y = y;
+          printf("y is %s\n",y);
+        }
+      }
+      let helloinst = new Hello(4,"Hello World!");
+      printf("x of helloinst is %d\n",helloinst.x);
+      printf("y of helloinst is %s\n",helloinst.y);
+    )";
   SchemeLLVM vm;
   vm.exec(program);
   return 0;

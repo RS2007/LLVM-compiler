@@ -68,13 +68,13 @@ std::ostream &operator<<(std::ostream &strm, ExpressionType tt) {
 class StringExpression {
 public:
   std::string value;
-  StringExpression(std::string value) { this->value = value; }
+  StringExpression(std::string &value) : value(value) {}
 };
 
 class IntegerExpression {
 public:
   int intValue;
-  IntegerExpression(int intValue) { this->intValue = intValue; }
+  IntegerExpression(int intValue) : intValue(intValue) {}
 };
 
 class InfixExpression {
@@ -84,11 +84,8 @@ public:
   TokenType op;
 
   InfixExpression(std::shared_ptr<ExpressionNode> lhs, TokenType op,
-                  std::shared_ptr<ExpressionNode> rhs) {
-    this->lhs = lhs;
-    this->op = op;
-    this->rhs = rhs;
-  }
+                  std::shared_ptr<ExpressionNode> rhs)
+      : lhs(lhs), op(op), rhs(rhs) {}
 };
 
 class IfStatement {
@@ -181,30 +178,24 @@ public:
   std::shared_ptr<AssignmentExpression> assignmentExpression;
   std::shared_ptr<MemberExpression> memberExpression;
   std::shared_ptr<NewExpression> newExpression;
-  ExpressionNode(std::shared_ptr<StringExpression> stringExp) {
-    this->type = ExpressionType::String;
-    this->stringExp = stringExp;
-  }
-  ExpressionNode(std::shared_ptr<IntegerExpression> integerExp) {
-    this->type = ExpressionType::Number;
-    this->integerExp = integerExp;
-  }
-  ExpressionNode(std::shared_ptr<InfixExpression> infixExpression) {
-    this->type = ExpressionType::Infix;
-    this->infixExpr = infixExpression;
-  }
+  ExpressionNode(std::shared_ptr<StringExpression> stringExp)
+      : type(ExpressionType::String), stringExp(stringExp) {}
+  ExpressionNode(std::shared_ptr<IntegerExpression> integerExp)
+      : type(ExpressionType::Number), integerExp(integerExp) {}
+  ExpressionNode(std::shared_ptr<InfixExpression> infixExpression)
+      : type(ExpressionType::Infix), infixExpr(infixExpression) {}
   ExpressionNode(std::shared_ptr<IdentifierExpression> identifierExpression)
-      : identifierExpression(identifierExpression),
-        type(ExpressionType::Identifier) {}
+      : type(ExpressionType::Identifier),
+        identifierExpression(identifierExpression) {}
   ExpressionNode(std::shared_ptr<CallExpression> callExpression)
-      : callExpression(callExpression), type(ExpressionType::Call) {}
+      : type(ExpressionType::Call), callExpression(callExpression) {}
   ExpressionNode(std::shared_ptr<AssignmentExpression> assignmentExpression)
-      : assignmentExpression(assignmentExpression),
-        type(ExpressionType::Assignment) {}
+      : type(ExpressionType::Assignment),
+        assignmentExpression(assignmentExpression) {}
   ExpressionNode(std::shared_ptr<MemberExpression> memberExpression)
-      : memberExpression(memberExpression), type(ExpressionType::Member) {}
+      : type(ExpressionType::Member), memberExpression(memberExpression) {}
   ExpressionNode(std::shared_ptr<NewExpression> newExpression)
-      : newExpression(newExpression), type(ExpressionType::New) {}
+      : type(ExpressionType::New), newExpression(newExpression) {}
 };
 
 class LetStatement {
@@ -348,6 +339,7 @@ static std::map<TokenType, Precedence> precedenceMap = {
 class Parser {
 public:
   Parser(std::vector<std::shared_ptr<Token>> tokens) { this->tokens = tokens; }
+  ~Parser() {}
 
   std::shared_ptr<ProgramNode> parse() {
     auto programNode = std::make_shared<ProgramNode>();
@@ -374,6 +366,7 @@ public:
     auto nextPrecedence = precedenceMapEntry->second;
 
     while ((*tokenIt).get() != 0x0 && (*(tokenIt + 1)).get() != 0x0 &&
+           (*(tokenIt)).get()->tokenType != TokenType::Semicolon &&
            precedence < nextPrecedence) {
       std::vector<TokenType> hasInfix = {
           TokenType::Plus,     TokenType::Minus,       TokenType::LParen,
@@ -382,8 +375,9 @@ public:
       if (std::find(hasInfix.begin(), hasInfix.end(),
                     (*tokenIt).get()->tokenType) != hasInfix.end()) {
         lhs = parseInfix(precedence, lhs);
+        nextPrecedence =
+            precedenceMap.find((*tokenIt).get()->tokenType)->second;
       }
-      return lhs;
     }
     return lhs;
   }
@@ -564,6 +558,7 @@ private:
       return parseNewExpression(precedence);
     }
     default:
+      std::cout << (*tokenIt).get()->tokenType << "\n";
       assert(false && "Should'nt hit here");
     }
   }
@@ -624,7 +619,7 @@ private:
       if ((*tokenIt).get()->tokenType == TokenType::Semicolon) {
         tokenIt++;
         continue;
-      }
+      } // not needed, statements parsing should necessarily eat the semicolon
       if ((*tokenIt).get()->tokenType == TokenType::RBrace) {
         tokenIt++;
         break;
@@ -666,6 +661,7 @@ private:
     }
     return arguments;
   }
+
   std::shared_ptr<ExpressionNode> parseInteger(Precedence precedence) {
     auto intExpression =
         std::make_shared<IntegerExpression>((*tokenIt).get()->numValue);
@@ -690,6 +686,7 @@ private:
     auto expressionNode = std::make_shared<ExpressionNode>(stringExpression);
     return expressionNode;
   }
+
   std::shared_ptr<ExpressionNode>
   parseCallExpression(Precedence precedence,
                       std::shared_ptr<ExpressionNode> left) {
@@ -706,6 +703,7 @@ private:
     tokenIt++;
     return std::make_shared<ExpressionNode>(callExpression);
   }
+
   std::shared_ptr<ExpressionNode>
   parseInfix(Precedence precedence, std::shared_ptr<ExpressionNode> left) {
     switch ((*tokenIt).get()->tokenType) {
@@ -728,6 +726,7 @@ private:
       return parseCallExpression(precedence, left);
     }
     case TokenType::Dot: {
+      todo();
     }
     case TokenType::Equal: {
       assert(left->type == ExpressionType::Identifier ||

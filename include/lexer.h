@@ -82,9 +82,10 @@ public:
 
 class Lexer {
 public:
-  std::vector<std::shared_ptr<Token>> lex(std::string input) {
+  ~Lexer() {}
+  std::vector<std::shared_ptr<Token>> lex(std::string_view input) {
     std::vector<std::shared_ptr<Token>> tokens;
-    std::string::iterator it = input.begin();
+    std::string_view::iterator it = input.begin();
     while (it < input.end()) {
       if (std::isspace(*it)) {
         it++;

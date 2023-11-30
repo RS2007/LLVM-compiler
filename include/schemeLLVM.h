@@ -141,8 +141,23 @@ private:
       // functions
       auto condition = genExpr(stmt->ifStatement->condition, env);
       auto ifTrueBlock = createBB("ifTrue", fn);
+      bool trueHasReturnStatement =
+          std::find_if(stmt->ifStatement->trueBlock->statements.begin(),
+                       stmt->ifStatement->trueBlock->statements.end(),
+                       [](std::shared_ptr<StatementNode> statement) {
+                         return statement->type == StatementType::Return;
+                       }) != stmt->ifStatement->trueBlock->statements.end();
       auto ifFalseBlock = createBB("ifFalse", fn);
-      auto ifEndBlock = createBB("ifEnd", fn);
+      bool falseHasReturnStatement =
+          std::find_if(stmt->ifStatement->falseBlock->statements.begin(),
+                       stmt->ifStatement->falseBlock->statements.end(),
+                       [](std::shared_ptr<StatementNode> statement) {
+                         return statement->type == StatementType::Return;
+                       }) != stmt->ifStatement->falseBlock->statements.end();
+      std::optional<llvm::BasicBlock *> ifEndBlock = nullptr;
+      // if (!trueHasReturnStatement || !falseHasReturnStatement) {
+      ifEndBlock = createBB("ifEnd", fn);
+      // }
       builder->CreateCondBr(condition, ifTrueBlock, ifFalseBlock);
       builder->SetInsertPoint(ifTrueBlock);
       auto trueBlock = stmt->ifStatement->trueBlock;
@@ -150,15 +165,21 @@ private:
            statementIt < trueBlock->statements.end(); statementIt++) {
         genStatement(*statementIt, env, oldFunc, block);
       }
-      builder->CreateBr(ifEndBlock);
+      if (!trueHasReturnStatement) {
+        builder->CreateBr(ifEndBlock.value());
+      }
       builder->SetInsertPoint(ifFalseBlock);
       auto falseBlock = stmt->ifStatement->falseBlock;
       for (auto statementIt = falseBlock->statements.begin();
            statementIt < falseBlock->statements.end(); statementIt++) {
         genStatement(*statementIt, env, oldFunc, block);
       }
-      builder->CreateBr(ifEndBlock);
-      builder->SetInsertPoint(ifEndBlock);
+      if (!falseHasReturnStatement) {
+        builder->CreateBr(ifEndBlock.value());
+      }
+      // if (!trueHasReturnStatement || !falseHasReturnStatement) {
+      builder->SetInsertPoint(ifEndBlock.value());
+      // }
       break;
     }
     case StatementType::For: {

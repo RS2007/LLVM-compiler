@@ -4,7 +4,8 @@
   - Support for `>=`,`<=`,`==`,`!`
 - [ ] Support for boolean data type
 - [ ] Cleaning up the parser
-  - [ ] Bug with parsing expression statements
+  - [x] Bug with parsing expression statements
+  - [ ] Cleaning `parseExpression`
 - [o] Finish the parser for if,function and call expressions(subsequently for the return,block and expression statements)
   - [x] Function
   - [x] If
@@ -13,15 +14,18 @@
   - [x] While
 - [o] Add support for classes and inheritance
   - [x] Classes(stack allocated) and property access working
-  - [ ] Heap allocation
+  - [x] Heap allocation
   - [ ] Member calls
 - [ ] Higher order function support
 - [ ] Implementing a type checker
+  - [ ] Adding support for proper types
 - [x] Map access error: fix this
 - [o] Test codegen for member functions
   - [x] Constructor working
 - [ ] Class Methods & V tables
 - [x] Based on the js parser, we will have an assignment expression and a member expression
+- [x] While codegenning for the if-else condition, if the true block has a return statement do not put a branch at the end, similarly for the false block
+
 
 ## Language Spec
 ```
@@ -62,3 +66,6 @@ defun add(x: number,y: number): number -> {
 
 ### The weird parser error
 - why can the lhs of the expression be the member expression 
+
+
+- [ ] Clean up parser, there are too many conditional checks in the while loop in `parseExpression`
